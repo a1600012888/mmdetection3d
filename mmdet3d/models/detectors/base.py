@@ -3,7 +3,6 @@ import torch
 from mmcv.parallel import DataContainer as DC
 from mmcv.runner import auto_fp16
 from os import path as osp
-
 from mmdet3d.core import Box3DMode, Coord3DMode, show_result
 from mmdet.models.detectors import BaseDetector
 

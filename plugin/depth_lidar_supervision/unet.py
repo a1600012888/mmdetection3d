@@ -401,13 +401,20 @@ class UNet(nn.Module):
 
             #print(depth_pred.shape, label.shape, mask.shape, 'data shape')
             loss = torch.abs((label - depth_pred)) * mask
+            epe = loss[mask]
+            gt = label[mask]
+
+            twenty_acc = torch.sum(epe < gt*0.2) / epe.numel()
+            ten_acc = torch.sum(epe < gt*0.1) / epe.numel()
+            five_acc = torch.sum(epe < gt*0.05) / epe.numel()
+            one_acc = torch.sum(epe < gt*0.01) / epe.numel()
             loss = torch.sum(loss) / torch.sum(mask)
 
             # hack the hook
             # outputs[0]=None. see https://github.com/open-mmlab/mmdetection/blob/master/mmdet/apis/test.py#L99
             #outputs = {'loss': loss, 'log_vars':log_vars, 'num_samples':depth_pred.size(0), 0:None}
             #print('val', loss)
-            return [loss.item()]
+            return [[loss.item(), twenty_acc.item(), ten_acc.item(), five_acc.item(), one_acc.item()]]
         raise NotImplementedError
         
 
@@ -420,12 +427,23 @@ class UNet(nn.Module):
         #from IPython import embed
         #embed()
         loss = torch.abs((label - depth_pred)) * mask
+
+        epe = loss[mask]
+        gt = label[mask]
+
+        twenty_acc = torch.sum(epe < gt*0.2) / epe.numel()
+        ten_acc = torch.sum(epe < gt*0.1) / epe.numel()
+        five_acc = torch.sum(epe < gt*0.05) / epe.numel()
+        one_acc = torch.sum(epe < gt*0.01) / epe.numel()
         loss = torch.sum(loss) / torch.sum(mask)
 
         log_var = {}
         sparsity = torch.sum(mask) * 1.0 / torch.numel(mask)
+        
 
-        log_vars = {'loss': loss.item(), 'sparsity': sparsity.item()}
+        log_vars = {'loss': loss.item(), 'sparsity': sparsity.item(), 
+                    'twenty_acc':twenty_acc.item(), 'ten_acc':ten_acc.item(), 'five_acc':five_acc.item(), 
+                    'one_acc':one_acc.item()}
         outputs = {'loss':loss, 'log_vars':log_vars, 'num_samples':depth_pred.size(0)}
 
         return outputs

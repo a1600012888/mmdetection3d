@@ -28,7 +28,7 @@ train_pipeline = [
     dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img
     dict(
         type='Resize',
-        img_scale=(675, 1200),
+        img_scale=(675, 1200), # short_edge, long_edge
         multiscale_mode='value',
         keep_ratio=True,),
     dict(type='Normalize', **img_norm_cfg), # normalize will transpose
@@ -44,7 +44,7 @@ train_pipeline2 = [
     dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img
     dict(
         type='Resize',
-        img_scale=(480, 896),
+        img_scale=(896, 480), # w, h
         multiscale_mode='value',
         keep_ratio=False),
     dict(type='Normalize', **img_norm_cfg),
@@ -62,13 +62,13 @@ data = dict(
     train=dict(
         type='NuscDepthDataset',
         data_path='data/nuscenes/depth_maps/train', 
-        pipeline=train_pipeline,
+        pipeline=train_pipeline2,
         training=True, 
     ),
     val=dict(
         type='NuscDepthDataset',
         data_path='data/nuscenes/depth_maps/train', 
-        pipeline=train_pipeline,
+        pipeline=train_pipeline2,
         training=False, 
     ),
 )

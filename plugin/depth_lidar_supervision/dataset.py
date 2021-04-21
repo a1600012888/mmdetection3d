@@ -68,9 +68,23 @@ class NuscDepthDataset(Dataset):
                  logger=None,
                  show=False,
                  out_dir=None):
-        loss = sum(results) / len(results)
+        # [(loss.item(), twenty_acc.item(), ten_acc.item(), five_acc.item(), one_acc.item())]
+        # print(results)
+        losses = [res[0] for res in results]
+        acc_20 = [res[1] for res in results]
+        acc_10 = [res[2] for res in results]
+        acc_5 = [res[3] for res in results]
+        acc_1 = [res[4] for res in results]
+
+        loss = sum(losses) / len(losses)
+        acc_20 = sum(acc_20) / len(acc_20)
+        acc_10 = sum(acc_10) / len(acc_10)
+        acc_5 = sum(acc_5) / len(acc_5)
+        acc_1 = sum(acc_1) / len(acc_1)
+
+
         #print(results, loss)
-        ret_dict = {'loss': loss }
+        ret_dict = {'loss': loss, 'acc_20': acc_20, 'acc_10':acc_10, 'acc_5':acc_5, 'acc_1':acc_1 }
 
         return ret_dict
         

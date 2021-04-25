@@ -118,3 +118,29 @@ class DepthPredictHead(nn.Module):
         pred = nn.functional.softplus(x)
 
         return pred
+
+
+def get_depth_metrics(pred, gt, mask=None):
+    """
+    params:
+    pred: [N,1,H,W].  torch.Tensor
+    gt: [N,1,H,W].     torch.Tensor
+    """
+    if mask is not None:
+        num = torch.sum(mask) # the number of non-zeros
+        pred = pred[mask]
+        gt = gt[mask]
+    else:
+        num = pred.numel()
+
+    num = num * 1.0
+    diff_i = gt - pred
+
+    abs_diff = torch.sum(torch.abs(diff_i)) / num
+    abs_rel = torch.sum(torch.abs(diff_i) / gt) / num
+    sq_rel = torch.sum(diff_i ** 2 / gt) / num
+    rmse = torch.sqrt(torch.sum(diff_i ** 2) / num)
+    rmse_log = torch.sqrt(torch.sum((torch.log(gt) -
+                                        torch.log(pred)) ** 2) / num)
+    
+    return abs_diff, abs_rel, sq_rel, rmse, rmse_log

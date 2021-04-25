@@ -6,7 +6,7 @@ from mmcv.cnn import (UPSAMPLE_LAYERS, ConvModule, build_activation_layer,
 from mmcv.runner import load_checkpoint
 from mmcv.utils.parrots_wrapper import _BatchNorm
 
-from .utils import UpConvBlock, DepthPredictHead
+from .utils import UpConvBlock, DepthPredictHead, get_depth_metrics
 from mmdet.utils import get_root_logger
 
 from mmdet.models import DETECTORS
@@ -401,20 +401,19 @@ class UNet(nn.Module):
 
             #print(depth_pred.shape, label.shape, mask.shape, 'data shape')
             loss = torch.abs((label - depth_pred)) * mask
-            epe = loss[mask]
-            gt = label[mask]
-
-            twenty_acc = torch.sum(epe < gt*0.2) / epe.numel()
-            ten_acc = torch.sum(epe < gt*0.1) / epe.numel()
-            five_acc = torch.sum(epe < gt*0.05) / epe.numel()
-            one_acc = torch.sum(epe < gt*0.01) / epe.numel()
             loss = torch.sum(loss) / torch.sum(mask)
+
+            with torch.no_grad():
+                metrics = get_depth_metrics(depth_pred, label, mask)
+                # abs_diff, abs_rel, sq_rel, rmse, rmse_log
+                metrics = [m.item() for m in metrics]
 
             # hack the hook
             # outputs[0]=None. see https://github.com/open-mmlab/mmdetection/blob/master/mmdet/apis/test.py#L99
             #outputs = {'loss': loss, 'log_vars':log_vars, 'num_samples':depth_pred.size(0), 0:None}
             #print('val', loss)
-            return [[loss.item(), twenty_acc.item(), ten_acc.item(), five_acc.item(), one_acc.item()]]
+            metrics.append(loss.item())
+            return [metrics]
         raise NotImplementedError
         
 
@@ -428,22 +427,23 @@ class UNet(nn.Module):
         #embed()
         loss = torch.abs((label - depth_pred)) * mask
 
-        epe = loss[mask]
-        gt = label[mask]
-
-        twenty_acc = torch.sum(epe < gt*0.2) / epe.numel()
-        ten_acc = torch.sum(epe < gt*0.1) / epe.numel()
-        five_acc = torch.sum(epe < gt*0.05) / epe.numel()
-        one_acc = torch.sum(epe < gt*0.01) / epe.numel()
         loss = torch.sum(loss) / torch.sum(mask)
 
         log_var = {}
+        with torch.no_grad():
+                metrics = get_depth_metrics(depth_pred, label, mask)
+                # abs_diff, abs_rel, sq_rel, rmse, rmse_log
+                metrics = [m.item() for m in metrics]
+                abs_diff, abs_rel, sq_rel, rmse, rmse_log = metrics
         sparsity = torch.sum(mask) * 1.0 / torch.numel(mask)
         
 
-        log_vars = {'loss': loss.item(), 'sparsity': sparsity.item(), 
-                    'twenty_acc':twenty_acc.item(), 'ten_acc':ten_acc.item(), 'five_acc':five_acc.item(), 
-                    'one_acc':one_acc.item()}
+        log_vars = {'loss': loss.item(), 'sparsity': sparsity.item(),
+                    'abs_diff': abs_diff, 'abs_rel': abs_rel, 
+                    'sq_rel': sq_rel, 'rmse': rmse, 
+                    'rmse_log': rmse_log
+                     }
+        
         outputs = {'loss':loss, 'log_vars':log_vars, 'num_samples':depth_pred.size(0)}
 
         return outputs

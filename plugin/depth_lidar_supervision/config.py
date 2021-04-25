@@ -4,20 +4,28 @@
 plugin = True
 
 
+#model = dict(
+#    type='UNet', 
+#    in_channels=3,
+#    out_channels=1, 
+#    base_channels=16,
+#    num_stages=5,
+#    strides=(1, 1, 1, 1, 1),
+#    enc_num_convs=(2, 2, 2, 2, 2),
+#    dec_num_convs=(2, 2, 2, 2),
+#    downsamples=(True, True, True, True),
+#    norm_cfg=dict(type='BN'),
+#    act_cfg=dict(type='ReLU'),
+#    upsample_cfg=dict(type='InterpConv'),
+#    )
 model = dict(
-    type='UNet', 
-    in_channels=3,
-    out_channels=1, 
-    base_channels=8,
-    num_stages=5,
-    strides=(1, 1, 1, 1, 1),
-    enc_num_convs=(2, 2, 2, 2, 2),
-    dec_num_convs=(2, 2, 2, 2),
-    downsamples=(True, True, True, True),
-    norm_cfg=dict(type='BN'),
-    act_cfg=dict(type='ReLU'),
-    upsample_cfg=dict(type='InterpConv'),
-    )
+    type='ResDepthModel', 
+    depth=18, 
+    strides=(1, 1, 1, 1),
+    dilations=(1, 1, 1, 1),
+    out_indices=(0, 1, 2, 3), 
+    base_channels=16, 
+)
 
 
 file_client_args = dict(backend='disk')
@@ -44,11 +52,12 @@ train_pipeline2 = [
     dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img
     dict(
         type='Resize',
-        img_scale=(896, 480), # w, h
+        img_scale=(896, 480), # w, h; note after reading is (h=900, w=1600)
         multiscale_mode='value',
         keep_ratio=False),
     dict(type='Normalize', **img_norm_cfg),
-    dict(type='LoadDepthImage', img_size=(480, 896), render_type='naive'), # results['seg_fields']
+    #dict(type='LoadDepthImage', img_size=(480, 896), render_type='naive'), # results['seg_fields']
+    dict(type='LoadDepthImage', img_size=(120, 224), render_type='naive'), # results['seg_fields']
     #dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
     #dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute'), 
     dict(type='ImageToTensor', keys=['img']),
@@ -99,7 +108,7 @@ workflow = [('train', 1)]
 # use a default schedule.
 # optimizer
 # This schedule is mainly used by models on nuScenes dataset
-optimizer = dict(type='AdamW', lr=1e-2, weight_decay=0.0001)
+optimizer = dict(type='AdamW', lr=1e-3, weight_decay=0.0001)
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(

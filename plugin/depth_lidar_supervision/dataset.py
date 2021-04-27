@@ -15,6 +15,8 @@ class NuscDepthDataset(Dataset):
         self.depth_root = os.path.join(data_path, 'depth_data')
         self.meta_path = os.path.join(data_path, 'meta.json')
         self.training = training
+        #from IPython import embed
+        #embed()
         if training:
             #self.data_infos = self.load_annotations()[:-20000]
             self.data_infos = self.load_annotations()[:-20000]

@@ -19,15 +19,29 @@ class LoadDepthImage(object):
         self.img_size = img_size # ()
         self.ylim, self.xlim = img_size
     
+    def sort_points(self, points):
+        '''
+        sort the points accroding to their depth in descending order
+        '''
+        depth = points[:, 2]
+        idx = np.argsort(depth) # ascending order
+        idx = idx[::-1]
+
+        new_points = points[idx]
+
+        return new_points
 
     def naive_depth_render(self, points, depth_map):
         '''
         for float cord, use its int version
         '''
+        points = self.sort_points(points)
+
         x_cords = points[:, 0] * self.xlim / 1600.0
         y_cords = points[:, 1] * self.ylim / 900.0
         depth = points[:, 2]
 
+        #print('debug', depth[:10].mean(), depth[10:100].mean(), depth[-100:].mean())
         #print('debug', x_cords.max(), y_cords.max(), depth_map.shape)
         x_cords = x_cords.astype(np.int)
         y_cords = y_cords.astype(np.int)

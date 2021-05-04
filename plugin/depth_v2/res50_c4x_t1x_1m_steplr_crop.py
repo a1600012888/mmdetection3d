@@ -41,7 +41,7 @@ train_pipeline = [
         keep_ratio=True,),
     dict(type='Normalize', **img_norm_cfg), # normalize will transpose
     dict(type='LoadDepthImage', img_size=(675, 1200), render_type='naive'), # results['seg_fields']
-    #dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
+    dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
     dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute', allow_negative_crop=True),
     #dict(type='RandomCrop', crop_size=(200, 200), crop_type='absolute', allow_negative_crop=True),
     dict(type='ImageToTensor', keys=['img']),
@@ -58,6 +58,7 @@ train_pipeline2 = [
     dict(type='Normalize', **img_norm_cfg),
     #dict(type='LoadDepthImage', img_size=(480, 896), render_type='naive'), # results['seg_fields']
     dict(type='LoadDepthImage', img_size=(120, 224), render_type='naive'), # results['seg_fields']
+    dict(type='RandomFlip', flip_ratio=0.5),
     #dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
     #dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute'),
     dict(type='ImageToTensor', keys=['img']),

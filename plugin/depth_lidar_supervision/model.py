@@ -93,7 +93,7 @@ class ResDepthModel(nn.Module):
                     'rmse_log': rmse_log
                      }
         
-        outputs = {'loss':loss, 'log_vars':log_vars, 'num_samples':depth_pred.size(0)}
+        outputs = {'pred': depth_pred, 'data': data['img'],'loss':loss, 'log_vars':log_vars, 'num_samples':depth_pred.size(0)}
 
         return outputs
     

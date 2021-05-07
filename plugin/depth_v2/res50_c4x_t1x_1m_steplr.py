@@ -32,22 +32,6 @@ file_client_args = dict(backend='disk')
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 
-train_pipeline = [
-    dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img
-    dict(
-        type='Resize',
-        img_scale=(675, 1200), # short_edge, long_edge
-        multiscale_mode='value',
-        keep_ratio=True,),
-    dict(type='Normalize', **img_norm_cfg), # normalize will transpose
-    dict(type='LoadDepthImage', img_size=(675, 1200), render_type='naive'), # results['seg_fields']
-    #dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
-    dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute', allow_negative_crop=True),
-    #dict(type='RandomCrop', crop_size=(200, 200), crop_type='absolute', allow_negative_crop=True),
-    dict(type='ImageToTensor', keys=['img']),
-    dict(type='Collect', keys=['img', 'depth_map']),
-
-]
 train_pipeline2 = [
     dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img
     dict(
@@ -56,14 +40,26 @@ train_pipeline2 = [
         multiscale_mode='value',
         keep_ratio=False),
     dict(type='Normalize', **img_norm_cfg),
-    #dict(type='LoadDepthImage', img_size=(480, 896), render_type='naive'), # results['seg_fields']
     dict(type='LoadDepthImage', img_size=(120, 224), render_type='naive'), # results['seg_fields']
-    #dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
-    #dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute'),
+    dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
     dict(type='ImageToTensor', keys=['img']),
     dict(type='Collect', keys=['img', 'depth_map']),
 
 ]
+val_pipeline = [
+    dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img
+    dict(
+        type='Resize',
+        img_scale=(896, 480), # w, h; note after reading is (h=900, w=1600)
+        multiscale_mode='value',
+        keep_ratio=False),
+    dict(type='Normalize', **img_norm_cfg),
+    dict(type='LoadDepthImage', img_size=(120, 224), render_type='naive'), # results['seg_fields']
+    dict(type='ImageToTensor', keys=['img']),
+    dict(type='Collect', keys=['img', 'depth_map']),
+
+]
+
 
 data = dict(
     samples_per_gpu=16,
@@ -77,21 +73,21 @@ data = dict(
     val=dict(
         type='NuscDepthDataset',
         data_path='data/nuscenes/depth_maps/train',
-        pipeline=train_pipeline2,
+        pipeline=val_pipeline,
         training=False,
     ),
 )
 
-checkpoint_config = dict(interval=2)
+checkpoint_config = dict(interval=10)
 # yapf:disable push
 # By default we use textlogger hook and tensorboard
 # For more loggers see
 # https://mmcv.readthedocs.io/en/latest/api.html#mmcv.runner.LoggerHook
 log_config = dict(
-    interval=50,
+    interval=100,
     hooks=[
         dict(type='TextLoggerHook'),
-        dict(type='TensorboardLoggerHook')
+        dict(type='TensorboardLoggerHook2')
     ])
 # yapf:enable
 dist_params = dict(backend='nccl')
@@ -122,3 +118,4 @@ momentum_config = None
 
 # runtime settings
 total_epochs = 60
+load_from='/home/zhangty/projects/mmdetection3d/work_dirs/res50_c4x_t1x_1m_steplr.back/epoch_60.pth'

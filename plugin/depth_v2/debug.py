@@ -41,29 +41,28 @@ train_pipeline = [
         keep_ratio=True,),
     dict(type='Normalize', **img_norm_cfg), # normalize will transpose
     dict(type='LoadDepthImage', img_size=(675, 1200), render_type='naive'), # results['seg_fields']
-    dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
+    #dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
     dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute', allow_negative_crop=True),
-    dict(type='ResizeDepthImage', scale=1/4, interpolation='bilinear'),
     #dict(type='RandomCrop', crop_size=(200, 200), crop_type='absolute', allow_negative_crop=True),
     dict(type='ImageToTensor', keys=['img']),
     dict(type='Collect', keys=['img', 'depth_map']),
 
 ]
-
-val_pipeline = [
+train_pipeline2 = [
     dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img
     dict(
         type='Resize',
-        img_scale=(675, 1200), # short_edge, long_edge
+        img_scale=(896, 480), # w, h; note after reading is (h=900, w=1600)
         multiscale_mode='value',
-        keep_ratio=True,),
-    dict(type='Normalize', **img_norm_cfg), # normalize will transpose
-    dict(type='LoadDepthImage', img_size=(675, 1200), render_type='naive'), # results['seg_fields']
-    dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute', allow_negative_crop=True),
-    dict(type='ResizeDepthImage', scale=1/4, interpolation='bilinear'),
-    #dict(type='RandomCrop', crop_size=(200, 200), crop_type='absolute', allow_negative_crop=True),
+        keep_ratio=False),
+    dict(type='Normalize', **img_norm_cfg),
+    #dict(type='LoadDepthImage', img_size=(480, 896), render_type='naive'), # results['seg_fields']
+    dict(type='LoadDepthImage', img_size=(120, 224), render_type='naive'), # results['seg_fields']
+    #dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
+    #dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute'),
     dict(type='ImageToTensor', keys=['img']),
     dict(type='Collect', keys=['img', 'depth_map']),
+
 ]
 
 data = dict(
@@ -72,13 +71,13 @@ data = dict(
     train=dict(
         type='NuscDepthDataset',
         data_path='data/nuscenes/depth_maps/train',
-        pipeline=train_pipeline,
+        pipeline=train_pipeline2,
         training=True,
     ),
     val=dict(
         type='NuscDepthDataset',
         data_path='data/nuscenes/depth_maps/train',
-        pipeline=val_pipeline,
+        pipeline=train_pipeline2,
         training=False,
     ),
 )
@@ -109,7 +108,7 @@ workflow = [('train', 1)]
 # use a default schedule.
 # optimizer
 # This schedule is mainly used by models on nuScenes dataset
-optimizer = dict(type='AdamW', lr=2e-3, weight_decay=0.001)
+optimizer = dict(type='AdamW', lr=2e-5, weight_decay=0.001)
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(
@@ -122,4 +121,5 @@ lr_config = dict(
 momentum_config = None
 
 # runtime settings
-total_epochs = 60
+total_epochs = 62
+load_from='/home/zhangty/projects/mmdetection3d/work_dirs/res50_c4x_t1x_1m_steplr/epoch_60.pth'

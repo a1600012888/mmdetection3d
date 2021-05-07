@@ -65,7 +65,19 @@ train_pipeline2 = [
     dict(type='Collect', keys=['img', 'depth_map']),
 
 ]
+val_pipeline = [
+    dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img
+    dict(
+        type='Resize',
+        img_scale=(896, 480), # w, h; note after reading is (h=900, w=1600)
+        multiscale_mode='value',
+        keep_ratio=False),
+    dict(type='Normalize', **img_norm_cfg),
+    dict(type='LoadDepthImage', img_size=(120, 224), render_type='naive'), # results['seg_fields']
+    dict(type='ImageToTensor', keys=['img']),
+    dict(type='Collect', keys=['img', 'depth_map']),
 
+]
 data = dict(
     samples_per_gpu=16,
     workers_per_gpu=2,
@@ -78,7 +90,7 @@ data = dict(
     val=dict(
         type='NuscDepthDataset',
         data_path='data/nuscenes/depth_maps/train',
-        pipeline=train_pipeline2,
+        pipeline=val_pipeline,
         training=False,
     ),
 )
@@ -121,5 +133,6 @@ lr_config = dict(
 )
 momentum_config = None
 
+load_from='/home/zhangty/projects/mmdetection3d/work_dirs/res50_c4x_t1x_1m_steplr_color/epoch_60.pth'
 # runtime settings
-total_epochs = 60
+total_epochs = 62

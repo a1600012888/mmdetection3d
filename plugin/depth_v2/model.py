@@ -88,13 +88,21 @@ class ResDepthModel(nn.Module):
         sparsity = torch.sum(mask) * 1.0 / torch.numel(mask)
 
 
+        std = torch.tensor([58.395, 57.12, 57.375]).cuda().view(1, -1, 1, 1)
+        mean = torch.tensor([123.675, 116.28, 103.53]).cuda().view(1, -1, 1, 1)
+        img = data['img'] * std + mean
+        img = img / 255.0
+        depth_at_gt = depth_pred * mask
         log_vars = {'loss': loss.item(), 'sparsity': sparsity.item(),
                     'abs_diff': abs_diff, 'abs_rel': abs_rel,
                     'sq_rel': sq_rel, 'rmse': rmse,
                     'rmse_log': rmse_log
                      }
-
-        outputs = {'loss':loss, 'log_vars':log_vars, 'num_samples':depth_pred.size(0)}
+        # 'pred', 'data', 'label', 'depth_at_gt' is used for visualization only!
+        outputs = {'pred': torch.clamp(1.0 / (depth_pred+1e-4), 0, 1), 'data': img,
+                'label': torch.clamp(1.0 / (label+1e-4), 0, 1),
+                'depth_at_gt': torch.clamp(1.0 / (depth_at_gt+1e-4), 0., 1),
+                'loss':loss, 'log_vars':log_vars, 'num_samples':depth_pred.size(0)}
 
         return outputs
 

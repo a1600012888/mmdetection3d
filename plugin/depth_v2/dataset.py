@@ -10,7 +10,7 @@ import copy
 class NuscDepthDataset(Dataset):
 
     CLASSES=2
-    def __init__(self, data_path='data/nuscenes/depth_maps/train/detpth_map', 
+    def __init__(self, data_path='data/nuscenes/depth_maps/train/detpth_map',
                 pipeline=None, training=True, **kwargs):
         self.depth_root = os.path.join(data_path, 'depth_data')
         self.meta_path = os.path.join(data_path, 'meta.json')
@@ -21,7 +21,6 @@ class NuscDepthDataset(Dataset):
             #self.data_infos = self.load_annotations()[:-20000]
             self.data_infos = self.load_annotations()[:-20000]
         else:
-            #self.data_infos = self.load_annotations()[-20000:]
             self.data_infos = self.load_annotations()[-20000:]
         if pipeline is not None:
             self.pipeline = Compose(pipeline)
@@ -32,18 +31,18 @@ class NuscDepthDataset(Dataset):
 
         with open(self.meta_path, 'r') as f:
             self.meta = json.load(f)
-        
+
         data_infos = []
 
         for data_info in self.meta:
             img_path = data_info['img_path']
             depth_path = data_info['depth_path']+'.npy' # depth_path+'.npy'
-            
-            tmp = {'img_info':{'filename':img_path}, 
+
+            tmp = {'img_info':{'filename':img_path},
                 'npy_info': {'filename': depth_path}}
 
             data_infos.append(tmp)
-        
+
         return data_infos
 
     def get_data_info(self, idx):
@@ -52,7 +51,7 @@ class NuscDepthDataset(Dataset):
         data_info['flip'] = None
         data_info['flip_direction'] = None
         return data_info
-    
+
     def __len__(self,):
         return len(self.data_infos)
 
@@ -73,7 +72,7 @@ class NuscDepthDataset(Dataset):
         # [(loss.item(), twenty_acc.item(), ten_acc.item(), five_acc.item(), one_acc.item())]
         # print(results)
 
-        
+
         abs_diff = [res[0] for res in results]
         abs_rel = [res[1] for res in results]
         sq_rel = [res[2] for res in results]
@@ -89,16 +88,16 @@ class NuscDepthDataset(Dataset):
         rmse = sum(rmse) / num_batch
         rmse_log = sum(rmse_log) / num_batch
         loss = sum(losses) / num_batch
-        
+
 
 
         #print(results, loss)
-        ret_dict = {'loss': loss, 
-                    'abs_diff': abs_diff, 'abs_rel': abs_rel, 
-                    'sq_rel': sq_rel, 'rmse': rmse, 
+        ret_dict = {'loss': loss,
+                    'abs_diff': abs_diff, 'abs_rel': abs_rel,
+                    'sq_rel': sq_rel, 'rmse': rmse,
                     'rmse_log': rmse_log
                      }
 
         return ret_dict
-        
+
 

@@ -116,6 +116,18 @@ def main():
     cfg = Config.fromfile(args.config)
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
+
+    # import modules from plguin/xx, registry will be updated
+    if hasattr(cfg, 'plugin') & cfg.plugin:
+        import importlib
+        _module_dir = os.path.dirname(args.config)
+        _module_dir = _module_dir.split('/')
+        _module_path = _module_dir[0]
+        for m in _module_dir[1:]:
+            _module_path = _module_path + '.' + m
+        print(_module_path)
+        plg_lib = importlib.import_module(_module_path)
+        
     # import modules from string list.
     if cfg.get('custom_imports', None):
         from mmcv.utils import import_modules_from_strings

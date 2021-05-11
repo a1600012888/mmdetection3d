@@ -13,8 +13,12 @@ class NuscDepthDataset(Dataset):
     def __init__(self, data_path='data/nuscenes/depth_maps/train/detpth_map',
                 pipeline=None, training=True, **kwargs):
         self.depth_root = os.path.join(data_path, 'depth_data')
-        self.meta_path = os.path.join(data_path, 'meta.json')
+        #self.meta_path = os.path.join(data_path, 'meta.json')
         self.training = training
+        if training:
+            self.meta_path = '/public/MARS/datasets/nuScenes-SF/depth_meta/meta_train.json'
+        else:
+            self.meta_path = '/public/MARS/datasets/nuScenes-SF/depth_meta/meta_val.json'
         #from IPython import embed
         #embed()
         if training:

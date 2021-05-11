@@ -38,6 +38,47 @@ def split_depth_meta(meta, nusc):
     
     return train_meta, val_meta
 
+def split_sf_meta(meta, nusc):
+    train_scenes = splits.train
+    val_scenes = splits.val
+
+    train_meta = {}
+    val_meta = {}
+
+    for m, value in tqdm(meta.items()):
+        sample_token = nusc.get('sample_data', m)['sample_token']
+        scene_name = get_scene_name(sample_token, nusc)
+
+        if scene_name in train_scenes:
+            train_meta[m] = value
+        elif scene_name in val_scenes:
+            val_meta[m] = value
+        else:
+            print('scene {} not in train or val'.format(scene_name))
+    return train_meta, val_meta
+
+def transform_sceneflow(root_dir='/public/MARS/datasets/nuScenes-SF/meta'):
+    split='train'
+    data_path='data/nuscenes/'
+    nusc = NuScenes(
+        version=SPLITS[split], dataroot=data_path, verbose=True)
+    
+    meta_path = os.path.join(root_dir, 'meta_sf.json')
+
+    with open(meta_path, 'r') as f:
+        meta = json.load(f)
+    
+    train_meta, val_meta = split_sf_meta(meta, nusc)
+
+    train_meta_path = os.path.join(root_dir, 'meta_sf_train.json')
+    val_meta_path = os.path.join(root_dir, 'meta_sf_val.json')
+
+    with open(train_meta_path, 'w') as f:
+        json.dump(train_meta, f)
+
+    with open(val_meta_path, 'w') as f:
+        json.dump(val_meta, f)
+
 def transform_depth(root_dir='/public/MARS/datasets/nuScenes/depth_maps'):
     split='train'
     data_path='data/nuscenes/'
@@ -61,5 +102,64 @@ def transform_depth(root_dir='/public/MARS/datasets/nuScenes/depth_maps'):
         json.dump(val_meta, f)
 
 
+def get_cam_filename_dict(token_dict, nusc):
+    ret_dict = {}
+    for name, token in token_dict.items():
+        ret_dict[name] = []
+        sample_data = nusc.get('sample', token)
+        for cam_name in CamNames:
+            cam_token = sample_data['data'][cam_name]
+            filename = nusc.get('sample_data', cam_token)['filename']
+            ret_dict[name].append(filename)
+    
+    return ret_dict
+
+
+def get_temporal_spatial_data(save_dir='/public/MARS/datasets/nuScenes-SF/meta'):
+    split='train'
+    data_path='data/nuscenes/'
+    nusc = NuScenes(
+        version=SPLITS[split], dataroot=data_path, verbose=True)
+
+    train_scenes = splits.train
+    val_scenes = splits.val
+
+    train_meta = []
+    val_meta = []
+    
+    ret = {
+        'now': {}, 
+        'prev': {}, 
+        'next': {}, 
+    }
+
+    for sample in tqdm(nusc.sample):
+        sample_token = sample['token']
+        prev_token = sample['prev']
+        next_token = sample['next']
+        if prev_token == '' or next_token == '':
+            continue
+        scene_name = get_scene_name(sample_token, nusc)
+        cam_filename_dict = get_cam_filename_dict({'now': sample_token, 'prev': prev_token, 'next': next_token}, nusc)
+
+        if scene_name in train_scenes:
+            train_meta.append(cam_filename_dict)
+        else:
+            val_meta.append(cam_filename_dict)
+    
+    
+    train_meta_path = os.path.join(save_dir, 'spatial_temp_train.json')
+    val_meta_path = os.path.join(save_dir, 'spatial_temp_val.json')
+
+    with open(train_meta_path, 'w') as f:
+        json.dump(train_meta, f)
+    with open(val_meta_path, 'w') as f:
+        json.dump(val_meta, f)
+        
+
+
+
 if __name__ == '__main__':
-    transform_depth(root_dir='/public/MARS/datasets/nuScenes/depth_maps')
+    #transform_depth(root_dir='/public/MARS/datasets/nuScenes/depth_maps')
+    #get_temporal_spatial_data()
+    transform_sceneflow()

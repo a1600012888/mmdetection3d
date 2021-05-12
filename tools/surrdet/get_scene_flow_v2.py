@@ -284,8 +284,7 @@ def generate_sf_for_one_sample(sample_token, nusc, save_dir, meta=None):
             ret['points_path'] = None
             meta[cam_token] = ret
             continue
-
-        
+ 
         cam_cs = nusc.get('calibrated_sensor', cam_data['calibrated_sensor_token'])
 
         ret_points = ret_dict[cam_name]

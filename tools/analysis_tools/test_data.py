@@ -7,14 +7,14 @@ from mmcv.runner import load_checkpoint
 
 from mmdet3d.datasets import build_dataloader, build_dataset
 from mmdet3d.models import build_detector
-from mmdet.core import wrap_fp16_model
+#from mmdet.core import wrap_fp16_model
 from tools.misc.fuse_conv_bn import fuse_module
+import os
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='MMDet benchmark a model')
     parser.add_argument('config', help='test config file path')
-    parser.add_argument('checkpoint', help='checkpoint file')
     parser.add_argument('--samples', default=2000, help='samples to benchmark')
     parser.add_argument(
         '--log-interval', default=50, help='interval of logging')
@@ -63,7 +63,7 @@ def main():
     fp16_cfg = cfg.get('fp16', None)
     if fp16_cfg is not None:
         wrap_fp16_model(model)
-    load_checkpoint(model, args.checkpoint, map_location='cpu')
+    #load_checkpoint(model, args.checkpoint, map_location='cpu')
     if args.fuse_conv_bn:
         model = fuse_module(model)
 
@@ -81,6 +81,8 @@ def main():
         torch.cuda.synchronize()
         start_time = time.perf_counter()
 
+        from IPython import embed
+        embed()
         with torch.no_grad():
             model(return_loss=False, rescale=True, **data)
 

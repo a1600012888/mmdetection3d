@@ -1,3 +1,5 @@
+from tools.surrdet.get_scene_flow_v2 import points_to_ann_cord
+from IPython.terminal.embed import embed
 from mmdet.datasets.builder import PIPELINES
 from mmdet.datasets.pipelines import LoadAnnotations, LoadImageFromFile
 from typing import Tuple, List, Union
@@ -111,33 +113,34 @@ class LoadSceneFlows(object):
 
         return new_points
 
-    def naive_depth_render(self, points, sf_map, valid_mask):
+    def naive_sceneflow_render(self, points, sf_map, valid_mask):
         '''
         for float cord, use its int version
         '''
+        points = points.transpose()
+        
         points = self.sort_points(points)
 
         # filter out noisy static points
         scene_flow = points[:, 3:]
-        speed = np.linalg.norm(scene_flow)
+        speed = np.linalg.norm(scene_flow, axis=-1)
         moving_mask = (speed > 0.2)
         
         static_points = points[np.logical_not(moving_mask)]
         moving_points = points[moving_mask]
 
-        static_points[:, 3:] = np.zeros(3)
+        static_points[:, 3:] = static_points[:, 3:] * 0
 
         points = np.concatenate([moving_points, static_points], axis=0)
 
         x_cords = points[:, 0] * self.xlim / 1600.0
         y_cords = points[:, 1] * self.ylim / 900.0
-        
-        scene_flow = np.clip(points[:, 3:], a_min=-100, a_max=100)
-
         x_cords = x_cords.astype(np.int)
         y_cords = y_cords.astype(np.int)
 
-        sf_map[y_cords, x_cords] = scene_flow
+        scene_flow = np.clip(points[:, 3:], a_min=-100, a_max=100)
+        
+        sf_map[y_cords, x_cords, :] = scene_flow
         valid_mask[y_cords, x_cords] = 1
 
         sf_map = np.concatenate([sf_map, valid_mask], axis=-1)
@@ -149,12 +152,19 @@ class LoadSceneFlows(object):
         
         i = 0
         for npy_file_path in npy_file_paths:
+            if npy_file_path is None:
+                sf_map = np.zeros((*self.img_size, 4))
+                results['seg_fields'].append('sf_map{}'.format(i))
+                results['sf_map{}'.format(i)] = sf_map
+                i += 1
+                continue
+
             points = np.load(npy_file_path)  # of shape [N, 3]: x, y, depth
             sf_map = np.zeros((*self.img_size, 3))
             valid_mask = np.zeros((*self.img_size, 1))
             
             if self.render_type == 'naive':
-                sf_map = self.naive_depth_render(points, sf_map, valid_mask) # [H,W,4]
+                sf_map = self.naive_sceneflow_render(points, sf_map, valid_mask) # [H,W,4]
 
             # 900x1600 => 1600x900
             # depth_map = depth_map.transpose(1,0)

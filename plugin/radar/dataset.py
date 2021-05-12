@@ -10,22 +10,22 @@ import copy
 class NuscSpatialTemp(Dataset):
 
     CLASSES=2
+
     def __init__(self, sf_path='/public/MARS/datasets/nuScenes-SF/trainval',
-                img_path='data/nuscenes/'
+                img_path='data/nuscenes/', 
+                pose_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic.json', 
                 pipeline=None, training=True, **kwargs):
 
         self.sf_path = sf_path
         self.img_path = img_path
-
+        self.pose_path = pose_path
         self.training = training
         if self.training:
             self.meta_path = '/public/MARS/datasets/nuScenes-SF/meta/spatial_temp_train.json'
-            self.depth_meta_path = '/public/MARS/datasets/nuScenes-SF/depth_meta/meta_train.json'
-            self.sf_meta_path = '/public/MARS/datasets/nuScenes-SF/meta/meta_sf_train.json'
+            self.merged_file_path = '/public/MARS/datasets/nuScenes-SF/meta/spatial_temp_merged_path_train.json'
         else:
             self.meta_path = '/public/MARS/datasets/nuScenes-SF/meta/spatial_temp_val.json'
-            self.depth_meta_path = '/public/MARS/datasets/nuScenes-SF/depth_meta/meta_val.json'
-            self.sf_meta_path = '/public/MARS/datasets/nuScenes-SF/meta/meta_sf_val.json'
+            self.merged_file_path = '/public/MARS/datasets/nuScenes-SF/meta/spatial_temp_merged_path_val.json'
 
         self.data_infos = self.load_annotations()
         if pipeline is not None:
@@ -38,24 +38,11 @@ class NuscSpatialTemp(Dataset):
         with open(self.meta_path, 'r') as f:
             self.meta = json.load(f)
         
-        with open(self.depth_meta_path, 'r') as f:
-            self.depth_meta = json.load(f)
+        with open(self.merged_file_path, 'r') as f:
+            self.imgpath2paths = json.load(f)
 
-        with open(self.sf_meta_path, 'r') as f:
-            self.sf_meta = json.load(f)
-        
-        self.imgpath2paths = {}
-
-        for depth_info in self.depth_meta:
-            token = depth_info['sample_token']
-            depth_path = depth_info['points_path']
-            sf_path = os.path.join(self.sf_path, self.sf_meta[token]['points_path'])
-            img_path = os.path.join(self.img_path, self.sf_meta[token]['img_path'])
-            
-            tmp = {'token': token, 'depth_path': depth_path, 
-                    'sf_path': sf_path, 'img_path': img_path}
-            
-            self.imgpath2paths[self.sf_meta[token]['img_path']] = tmp
+        with open(self.pose_path, 'r') as f:
+            self.token2pose = json.load(f)
 
         data_infos = []
 
@@ -64,19 +51,33 @@ class NuscSpatialTemp(Dataset):
             file_names = []
             depth_paths = []
             sf_paths = []
+            cam_intrinsics = []
+            cam_poses = []
 
             for time_key in ['prev', 'now', 'next']:
                 img_names = data_info[time_key]
                 for img_name in img_names:
                     paths_info = self.imgpath2paths[img_name]
-                    depth_path = paths_info['depth_path'] + 'npy' # +'.npy'
-                    file_names.append(paths_info['img_path'])
+                    cam_token = paths_info['token']
+                    cam_intrinsic = self.token2pose[cam_token]['intrinsic']
+                    cam_pose = self.token2pose[cam_token]['pose']
+                    cam_intrinsics.append(cam_intrinsic)
+                    cam_poses.append(cam_pose)
+
+                    depth_path = paths_info['depth_path'] + '.npy' # +'.npy'
+                    file_names.append(os.path.join(self.img_path, paths_info['img_path']))
                     depth_paths.append(depth_path)
-                    sf_paths.append(paths_info['sf_path'])
+                    if paths_info['sf_path'] is not None:
+                        sf_paths.append(os.path.join(self.sf_path, paths_info['sf_path']))
+                    else:
+                        sf_paths.append(None)
             
-            tmp = {'img_info': {'filename': file_names, 'img_prefix': None},
+            tmp = {'img_info': {'filenames': file_names, 'img_prefix': None, 
+                                'filename': file_names[0]},
                 'npy_info': {'depth_paths': depth_paths, 
-                            'sf_paths': sf_paths}
+                            'sf_paths': sf_paths}, 
+                'cam_intrinsic': np.array(cam_intrinsics),  # [4,4] 
+                'cam_pose': np.array(cam_poses),  # [3, 3]
                 }
 
             data_infos.append(tmp)

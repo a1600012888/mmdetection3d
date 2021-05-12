@@ -39,21 +39,27 @@ train_pipeline = [
     dict(type='LoadDepthImages', img_size=(448, 768), render_type='naive'), # results['seg_fields']
     dict(type='LoadSceneFlows', img_size=(448, 768), render_type='naive'), # results['seg_fields']
     dict(type='ImageToTensor', keys=['img{}'.format(i) for i in range(18)]),
-    dict(type='Collect', keys=['img', 'depth_map']),
+    dict(type='Collect', keys=['img{}'.format(i) for i in range(18)] + \
+                            ['depth_map{}'.format(i) for i in range(18)] + \
+                            ['sf_map{}'.format(i) for i in range(18)] + \
+                            ['cam_intrinsic', 'cam_pose']),
 
 ]
 val_pipeline = [
-    dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img
+    dict(type='LoadImageFromFiles'), # filenames = results['img_info']['filenames']； results['img{}'.format(i)] = img
     dict(
         type='Resize',
         img_scale=(768, 448), # w, h; note after reading is (h=900, w=1600)
         multiscale_mode='value',
         keep_ratio=False),
-    dict(type='Normalize', **img_norm_cfg),
-    dict(type='LoadDepthImage', img_size=(448, 768), render_type='naive'), # results['seg_fields']
-    dict(type='ImageToTensor', keys=['img']),
-    dict(type='Collect', keys=['img', 'depth_map']),
-
+    dict(type='Normalize', **img_norm_cfg), # results.get('img_fields', ['img'])
+    dict(type='LoadDepthImages', img_size=(448, 768), render_type='naive'), # results['seg_fields']
+    dict(type='LoadSceneFlows', img_size=(448, 768), render_type='naive'), # results['seg_fields']
+    dict(type='ImageToTensor', keys=['img{}'.format(i) for i in range(18)]),
+    dict(type='Collect', keys=['img{}'.format(i) for i in range(18)] + \
+                            ['depth_map{}'.format(i) for i in range(18)] + \
+                            ['sf_map{}'.format(i) for i in range(18)] + \
+                            ['cam_intrinsic', 'cam_pose']),
 ]
 
 
@@ -61,20 +67,26 @@ data = dict(
     samples_per_gpu=16,
     workers_per_gpu=2,
     train=dict(
-        type='NuscDepthDataset',
-        data_path='data/nuscenes/depth_maps/train',
+        type='NuscSpatialTemp',
+        sf_path='/public/MARS/datasets/nuScenes-SF/trainval',
+        img_path='data/nuscenes/', 
+        pose_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic.json', 
         pipeline=train_pipeline,
         training=True,
     ),
     val=dict(
-        type='NuscDepthDataset',
-        data_path='data/nuscenes/depth_maps/train',
+        type='NuscSpatialTemp',
+        sf_path='/public/MARS/datasets/nuScenes-SF/trainval',
+        img_path='data/nuscenes/', 
+        pose_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic.json', 
         pipeline=val_pipeline,
         training=False,
     ),
     test=dict(
-        type='NuscDepthDataset',
-        data_path='data/nuscenes/depth_maps/train',
+        type='NuscSpatialTemp',
+        sf_path='/public/MARS/datasets/nuScenes-SF/trainval',
+        img_path='data/nuscenes/', 
+        pose_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic.json', 
         pipeline=val_pipeline,
         training=False,
         #samples_per_gpu=16, 

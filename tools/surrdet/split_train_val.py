@@ -157,9 +157,47 @@ def get_temporal_spatial_data(save_dir='/public/MARS/datasets/nuScenes-SF/meta')
         json.dump(val_meta, f)
         
 
+def merge_depth_sf(depth_meta_path, 
+                sf_meta_path, save_path):
+    
+    with open(depth_meta_path, 'r') as f:
+        depth_meta = json.load(f)
+
+    with open(sf_meta_path, 'r') as f:
+        sf_meta = json.load(f)
+    
+    split = 'train'
+    data_path = 'data/nuscenes/'
+    nusc = NuScenes(
+        version=SPLITS[split], dataroot=data_path, verbose=True)
+    
+    imgpath2paths = {}
+    for depth_info in depth_meta:
+        sample_token = depth_info['sample_token']
+    
+        depth_path = depth_info['depth_path']
+        img_path = depth_info['img_path']
+        cam_name = img_path.split('/')[-2]
+
+        cam_token = nusc.get('sample', sample_token)['data'][cam_name]
+        sf_path = sf_meta[cam_token]['points_path']
+        img_path = sf_meta[cam_token]['img_path'] # use this version of img path
+
+        tmp = {'token': cam_token, 'depth_path': depth_path, 
+                'cam_name': cam_name, 'sf_path': sf_path, 
+                'img_path': img_path}
+        imgpath2paths[img_path] = tmp
+
+    with open(save_path, 'w') as f:
+        json.dump(imgpath2paths, f)
 
 
 if __name__ == '__main__':
     #transform_depth(root_dir='/public/MARS/datasets/nuScenes/depth_maps')
     #get_temporal_spatial_data()
-    transform_sceneflow()
+    #transform_sceneflow()
+
+    merge_depth_sf(depth_meta_path = '/public/MARS/datasets/nuScenes-SF/depth_meta/meta_val.json', 
+                sf_meta_path = '/public/MARS/datasets/nuScenes-SF/meta/meta_sf_val.json', 
+                save_path='/public/MARS/datasets/nuScenes-SF/meta/spatial_temp_merged_path_val.json')
+

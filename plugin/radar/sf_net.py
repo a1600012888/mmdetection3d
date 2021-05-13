@@ -22,7 +22,7 @@ def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1):
     )
 
 class IFBlock(nn.Module):
-    def __init__(self, in_planes, scale=1, c=64):
+    def __init__(self, in_planes, out_channels, scale=1, c=64):
         super(IFBlock, self).__init__()
         self.scale = scale
         self.conv0 = nn.Sequential(
@@ -39,7 +39,7 @@ class IFBlock(nn.Module):
             conv(c, c),
             conv(c, c),
         )
-        self.conv1 = nn.ConvTranspose2d(c, 3, 4, 2, 1)
+        self.conv1 = nn.ConvTranspose2d(c, out_channels, 4, 2, 1)
 
     def forward(self, x):
         if self.scale != 1:
@@ -49,8 +49,9 @@ class IFBlock(nn.Module):
         x = self.conv1(x)
         flow = x
         if self.scale != 1:
-            flow = F.interpolate(flow, scale_factor= self.scale, mode="bilinear", align_corners=False)
+            flow = F.interpolate(flow, scale_factor=self.scale, mode="bilinear", align_corners=False)
         return flow
+
 
 class SFNet(nn.Module):
 
@@ -58,13 +59,15 @@ class SFNet(nn.Module):
         super(SFNet, self).__init__()
 
         self.conv1 = conv(6, 16)
-        self.conv_block = IFBlock(in_planes=16, scale=1, c=64)
-        
+        self.conv_block = IFBlock(in_planes=16, out_channels=16, scale=1, c=64)
+        self.up_head = nn.ConvTranspose2d(16, 3, 4, 2, 1)
+
     def get_pred(self, img1, img2):
         img = torch.cat([img1, img2], dim=1)
         x = self.conv1(img)
-        
-        pred = self.conv_block(x)
+
+        x = self.conv_block(x)
+        pred = self.up_head(x)
 
         return pred
 

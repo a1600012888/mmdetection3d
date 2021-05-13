@@ -20,8 +20,8 @@ plugin = True
 #    )
 model = dict(
     type='SpatialTempNet',
-    depth_net_cfg = {'version':'1A', }, 
-    sf_net_cfg = None, 
+    depth_net_cfg = {'version':'1A', },
+    sf_net_cfg = None,
 )
 
 
@@ -70,27 +70,27 @@ data = dict(
     train=dict(
         type='NuscSpatialTemp',
         sf_path='/public/MARS/datasets/nuScenes-SF/trainval',
-        img_path='data/nuscenes/', 
-        pose_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic.json', 
+        img_path='data/nuscenes/',
+        pose_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic.json',
         pipeline=train_pipeline,
         training=True,
     ),
     val=dict(
         type='NuscSpatialTemp',
         sf_path='/public/MARS/datasets/nuScenes-SF/trainval',
-        img_path='data/nuscenes/', 
-        pose_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic.json', 
+        img_path='data/nuscenes/',
+        pose_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic.json',
         pipeline=val_pipeline,
         training=False,
     ),
     test=dict(
         type='NuscSpatialTemp',
         sf_path='/public/MARS/datasets/nuScenes-SF/trainval',
-        img_path='data/nuscenes/', 
-        pose_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic.json', 
+        img_path='data/nuscenes/',
+        pose_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic.json',
         pipeline=val_pipeline,
         training=False,
-        #samples_per_gpu=16, 
+        #samples_per_gpu=16,
     ),
 )
 
@@ -120,7 +120,7 @@ workflow = [('train', 1)]
 # use a default schedule.
 # optimizer
 # This schedule is mainly used by models on nuScenes dataset
-optimizer = dict(type='AdamW', lr=2e-3, weight_decay=0.001)
+optimizer = dict(type='AdamW', lr=2e-5, weight_decay=0.001)
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(

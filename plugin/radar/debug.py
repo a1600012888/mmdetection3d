@@ -19,8 +19,9 @@ plugin = True
 #    upsample_cfg=dict(type='InterpConv'),
 #    )
 model = dict(
-    type='PackNetSlim01',
-    version='1A', 
+    type='SpatialTempNet',
+    depth_net_cfg = {'version':'1A', }, 
+    sf_net_cfg = None, 
 )
 
 
@@ -64,7 +65,7 @@ val_pipeline = [
 
 
 data = dict(
-    samples_per_gpu=16,
+    samples_per_gpu=1,
     workers_per_gpu=2,
     train=dict(
         type='NuscSpatialTemp',
@@ -133,4 +134,5 @@ momentum_config = None
 
 # runtime settings
 total_epochs = 60
-load_from='/public/MARS/surrdet/tyz/depth-net.pth'
+#load_from='/public/MARS/surrdet/tyz/depth-net.pth'
+load_from=None

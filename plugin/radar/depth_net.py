@@ -115,7 +115,8 @@ class PackNetSlim01(nn.Module):
         Runs the network and returns inverse depth maps
         (4 scales if training and 1 if not).
         """
-        x = data['img']
+        # x = data['img']
+        x = data
         x = self.pre_calc(x)
 
         # Encoder

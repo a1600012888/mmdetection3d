@@ -76,8 +76,8 @@ class NuscSpatialTemp(Dataset):
                                 'filename': file_names[0]},
                 'npy_info': {'depth_paths': depth_paths, 
                             'sf_paths': sf_paths}, 
-                'cam_intrinsic': np.array(cam_intrinsics),  # [4,4] 
-                'cam_pose': np.array(cam_poses),  # [3, 3]
+                'cam_intrinsic': np.array(cam_intrinsics).astype(np.float32),  # [4,4] 
+                'cam_pose': np.array(cam_poses).astype(np.float32),  # [3, 3]
                 }
 
             data_infos.append(tmp)

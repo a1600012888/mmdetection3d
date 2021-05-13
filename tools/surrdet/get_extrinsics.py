@@ -11,8 +11,8 @@ CamNames = ['CAM_FRONT', 'CAM_FRONT_RIGHT',
 
 
 def quat_trans2matrix(quant, translation):
-    quant_matrix = Quaternion(quant).rotation_matrix
-    translation = np.array(translation)
+    quant_matrix = Quaternion(quant).rotation_matrix.T
+    translation = np.array(translation) * -1.0
 
     # shape [3, 4]
     matrix = np.concatenate([quant_matrix, translation[:, np.newaxis]], axis=-1)
@@ -41,7 +41,9 @@ def get_pose_intrinsic(save_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pos
             ego_pose = nusc.get('ego_pose', cam_data['ego_pose_token'])
             cam_cs = nusc.get('calibrated_sensor', cam_data['calibrated_sensor_token'])
 
+            # used to transform from ego to global
             pose_matrix = quat_trans2matrix(ego_pose['rotation'], ego_pose['translation'])
+            # used to transform from cameral to ego
             cam_pose = quat_trans2matrix(cam_cs['rotation'], cam_cs['translation'])
 
             cam_pose_world = np.matmul(pose_matrix, cam_pose)

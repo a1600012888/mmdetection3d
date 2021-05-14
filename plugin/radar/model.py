@@ -30,7 +30,7 @@ class SpatialTempNet(nn.Module):
         self.sf_net = SFNet()
         self.photometric_loss = PhotometricLoss(alpha=0.1, clip_loss=0.5, C1=1e-4, C2=9e-4)
 
-    def forward(self, data):
+    def forward(self, data, **kwargs):
         # prev: 0-5; now: 6-11; next: 12:17
         img_keys = ['img{}'.format(i) for i in range(18)]
 
@@ -98,22 +98,24 @@ class SpatialTempNet(nn.Module):
                                         now_cam_pose, next_cam_pose,
                                         now2next_sf_pred)
 
-        
+
         temp_rec_losses = self.photometric_loss([rec_prev_imgs], [prev_imgs]) + \
                         self.photometric_loss([rec_next_imgs], [next_imgs])
 
         #from IPython import embed
         #embed()
-        consis_sf_loss = calc_scene_flow_consistency_loss([now2prev_sf_pred, now2next_sf_pred], now_cam_intrin, now_cam_pose, now_inv_depth)
+        consis_sf_loss, sf_valid_mask_ratio = calc_scene_flow_consistency_loss([now2prev_sf_pred, now2next_sf_pred], now_cam_intrin, now_cam_pose, now_inv_depth)
         consis_inv_dep_loss, valid_mask_ratio = calc_depth_consistency_loss(now_inv_depth, now_cam_intrin, now_cam_pose)
+        consis_inv_dep_loss = consis_inv_dep_loss
         temp_rec_loss = temp_rec_losses[0].mean(dim=0).mean()
 
         loss = temp_rec_loss + consis_sf_loss + consis_inv_dep_loss
         log_vars = {'loss': loss.item(),
-                    'temp_rec_loss': temp_rec_loss.item(), 
-                    'inv_depth_consis_loss': consis_inv_dep_loss.item(), 
-                    'sceneflow_consis_loss': consis_sf_loss.item(), 
-                    'valid_mask_ratio': valid_mask_ratio, 
+                    'temp_rec_loss': temp_rec_loss.item(),
+                    'inv_depth_consis_loss': consis_inv_dep_loss.item(),
+                    'sceneflow_consis_loss': consis_sf_loss.item(),
+                    'valid_mask_ratio': valid_mask_ratio,
+                    'sf_valid_mask_ratio': sf_valid_mask_ratio,
                     }
 
         return loss, log_vars
@@ -121,7 +123,7 @@ class SpatialTempNet(nn.Module):
     def train_step(self, data, optimzier):
 
         loss, log_vars = self(data)
-        
+
         # 'pred', 'data', 'label', 'depth_at_gt' is used for visualization only!
         outputs = {'loss':loss, 'log_vars':log_vars,
                     'num_samples':data['img1'].size(0)}

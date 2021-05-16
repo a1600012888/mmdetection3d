@@ -7,6 +7,7 @@ from .layers01 import \
 
 from .utils import DepthPredictHead2Up, get_depth_metrics
 from mmdet.models import DETECTORS
+import torch.nn.functional as F
 
 @DETECTORS.register_module()
 class PackNetSlim01(nn.Module):
@@ -43,6 +44,7 @@ class PackNetSlim01(nn.Module):
         iconv_kernel = [3, 3, 3, 3, 3]
         num_3d_feat = 4
         # Initial convolutional layer
+        #self.down_sample_conv = Conv2D(in_channels, 16, 5, 2)
         self.pre_calc = Conv2D(in_channels, ni, 5, 1)
         # Support for different versions
         if self.version == 'A':  # Channel concatenation
@@ -117,6 +119,7 @@ class PackNetSlim01(nn.Module):
         """
         # x = data['img']
         x = data
+        #x = self.down_sample_conv(x)
         x = self.pre_calc(x)
 
         # Encoder
@@ -189,8 +192,9 @@ class PackNetSlim01(nn.Module):
         else:
             inv_depths = [inv_depth1]
 
+        #inv_depths = [F.interpolate(t_inv_depth, scale_factor=2, mode="bilinear", align_corners=False) for t_inv_depth in inv_depths]
         # ret depth pred
-        return 1.0 / inv_depth1
+        return inv_depths[0]
 
     def forward(self, return_loss=True, rescale=False, **kwargs):
 

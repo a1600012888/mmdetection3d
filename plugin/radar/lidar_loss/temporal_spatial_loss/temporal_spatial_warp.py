@@ -3,7 +3,7 @@ import torch.nn.functional as funct
 from ..geometry.camera import Camera
 from ..geometry.pose import Pose
 from ..geometry.camera_utils import view_synthesis
-from ..utils.depth import inv2depth
+from ..utils.depth import inv2depth, depth2inv
 
 
 padding_mode = 'zeros' # padding mode for view_synthesis
@@ -299,9 +299,8 @@ def calc_depth_consistency_loss(inv_depth, intrinsic, extrinsic):
         
         # transform ref_depth to tgt view
         world_points_from_ref_cam = ref_cam.reconstruct(inv2depth(ref_inv_depth), frame='w')
-        points_to_tgt_camera = ref_cam.Twc @  world_points_from_ref_cam
-        depth_in_tft_camera = points_to_tgt_camera[:, [-1], ...]
-        ref_invdepth_in_tft_camera = 1.0 / (points_to_tgt_camera[:, [-1], ...] + 1e-4)
+        points_to_tgt_camera = cam.Twc @  world_points_from_ref_cam
+        ref_invdepth_in_tft_camera = depth2inv(points_to_tgt_camera[:, [-1], ...])
 
         # warp ref inv depth to reconstruct tgt depth
         warped_target_inv_depth = funct.grid_sample(ref_invdepth_in_tft_camera, ref_coords, mode='bilinear',

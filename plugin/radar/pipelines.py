@@ -73,10 +73,6 @@ class LoadDepthImages(object):
             if self.render_type == 'naive':
                 depth_map = self.naive_depth_render(points, depth_map)
 
-            # 900x1600 => 1600x900
-            # depth_map = depth_map.transpose(1,0)
-            #results['seg_fields'] = torch.tensor(depth_map)
-
             results['seg_fields'].append('depth_map{}'.format(i))
             results['depth_map{}'.format(i)] = depth_map
             i += 1

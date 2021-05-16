@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
-
+import matplotlib as mpl
+import matplotlib.cm as cm
+import numpy as np
 
 def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1):
     return nn.Sequential(
@@ -42,11 +44,13 @@ class DepthPredictHead2Up(nn.Module):
         return pred
 
 
-def get_depth_metrics(pred, gt, mask=None):
+def get_depth_metrics(pred, gt, mask=None, scale=False):
     """
     params:
     pred: [N,1,H,W].  torch.Tensor
     gt: [N,1,H,W].     torch.Tensor
+
+    scale: bool. True: scale the pred depth using median(typically used for eval unsupervised depth)
     """
     if mask is not None:
         num = torch.sum(mask) # the number of non-zeros
@@ -55,6 +59,11 @@ def get_depth_metrics(pred, gt, mask=None):
     else:
         num = pred.numel()
 
+    if scale:
+        ratio = torch.median(pred) / torch.median(gt)
+        pred = pred * ratio
+    else:
+        ratio = 1.0
     num = num * 1.0
     diff_i = gt - pred
 
@@ -65,4 +74,23 @@ def get_depth_metrics(pred, gt, mask=None):
     rmse_log = torch.sqrt(torch.sum((torch.log(gt) -
                                         torch.log(pred)) ** 2) / num)
 
-    return abs_diff, abs_rel, sq_rel, rmse, rmse_log
+    return abs_diff, abs_rel, sq_rel, rmse, rmse_log, torch.tensor(ratio)
+
+
+def remap_invdepth_color(disp):
+    '''
+    disp: torch.Tensor [1, H, W]
+    '''
+
+    disp_np = disp.squeeze().cpu().numpy()
+    vmax = np.percentile(disp_np, 95)
+    normalizer = mpl.colors.Normalize(vmin=disp_np.min(), vmax=vmax)
+    mapper = cm.ScalarMappable(norm=normalizer, cmap='magma')
+
+    # colormapped_im = (mapper.to_rgba(disp_np)[:, :, :3] * 255).astype(np.uint8)
+    # im = pil.fromarray(colormapped_im)
+    # shape [H, W, 3]
+    colormapped_im = (mapper.to_rgba(disp_np)[:, :, :3]) 
+
+    return colormapped_im
+    

@@ -57,10 +57,10 @@ class TensorboardLoggerHook2(LoggerHook):
                 self.writer.add_scalar(tag, runner.log_buffer.output[var],
                                        runner.iter)
         for var in runner.outputs:
-            if var in ['pred', 'data', 'label', 'depth_at_gt']:
+            if var in ['inv_depth_pred', 'inv_depth_gt', 'img']:
                 tag = f'{var}/{runner.mode}'
                 img = runner.outputs[var]
-                self.writer.add_images(tag, img, runner.iter)
+                self.writer.add_image(tag, img, runner.iter)
         # add learning rate
         lrs = runner.current_lr()
         if isinstance(lrs, dict):
@@ -81,10 +81,10 @@ class TensorboardLoggerHook2(LoggerHook):
     @master_only
     def after_epoch(self, runner):
         for var in runner.outputs:
-            if var in ['pred', 'data', 'label', 'depth_at_gt']:
+            if var in ['inv_depth_pred', 'inv_depth_gt', 'img']:
                 tag = f'{var}/{runner.mode}'
                 img = runner.outputs[var]
-                self.writer.add_images(tag, img, runner.iter)
+                self.writer.add_image(tag, img, runner.iter)
 
     @master_only
     def after_run(self, runner):

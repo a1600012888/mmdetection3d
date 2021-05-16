@@ -11,8 +11,8 @@ CamNames = ['CAM_FRONT', 'CAM_FRONT_RIGHT',
 
 
 def quat_trans2matrix(quant, translation):
-    quant_matrix = Quaternion(quant).rotation_matrix.T
-    translation = np.array(translation) * -1.0
+    quant_matrix = Quaternion(quant).rotation_matrix
+    translation = np.array(translation)
 
     # shape [3, 4]
     matrix = np.concatenate([quant_matrix, translation[:, np.newaxis]], axis=-1)

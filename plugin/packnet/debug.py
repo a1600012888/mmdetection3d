@@ -26,7 +26,8 @@ model = dict(
 
 file_client_args = dict(backend='disk')
 img_norm_cfg = dict(
-    mean=[0,0,0], std=[255.0,255.0,255.0], to_rgb=True)
+    mean=[0,0,0], std=[255.0,255.0,255.0],  to_rgb=True)
+    #mean=[58.395, 57.12, 57.375], std=[123.675, 116.28, 103.53], to_rgb=True)
 
 train_pipeline2 = [
     dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img

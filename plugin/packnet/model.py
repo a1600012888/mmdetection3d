@@ -5,7 +5,7 @@ import torch.nn as nn
 from .layers01 import \
     PackLayerConv3d, UnpackLayerConv3d, Conv2D, ResidualBlock, InvDepth
 
-from .utils import DepthPredictHead2Up, get_depth_metrics
+from .utils import get_depth_metrics
 from mmdet.models import DETECTORS
 
 @DETECTORS.register_module()
@@ -251,6 +251,7 @@ class PackNetSlim01(nn.Module):
                     'sq_rel': sq_rel, 'rmse': rmse,
                     'rmse_log': rmse_log
                      }
+
         # 'pred', 'data', 'label', 'depth_at_gt' is used for visualization only!
         outputs = {'pred': torch.clamp(1.0 / (depth_pred+1e-4), 0, 1), 'data': img,
                 'label': torch.clamp(1.0 / (label+1e-4), 0, 1),

@@ -24,12 +24,12 @@ model = dict(
     depth_net_cfg={'version': '1A', },
     sf_net_cfg=None,
     scale_depth=True,
-    depth_supervision_ratio=-1,
-    depth_smoothing=1e-2, 
+    depth_supervision_ratio=0.01,
+    depth_smoothing=1e-2,
     motion_smoothing=1e-3,
-    sf_consis=1.0, 
-    depth_consis=1.0, 
-    rgb_consis=1.0, 
+    sf_consis=1.0,
+    depth_consis=1.0,
+    rgb_consis=1.0,
     loss_decay=1.0
 )
 
@@ -129,7 +129,7 @@ workflow = [('train', 1)]
 # use a default schedule.
 # optimizer
 # This schedule is mainly used by models on nuScenes dataset
-optimizer = dict(type='AdamW', lr=2e-6, weight_decay=0.001)
+optimizer = dict(type='AdamW', lr=1e-2, weight_decay=0.001)
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(

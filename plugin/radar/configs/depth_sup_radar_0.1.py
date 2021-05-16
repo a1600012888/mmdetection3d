@@ -23,8 +23,14 @@ model = dict(
     type='SpatialTempNet',
     depth_net_cfg={'version': '1A', },
     sf_net_cfg=None,
-    scale=False,
-    depth_supervision_ratio=0.1
+    scale_depth=True,
+    depth_supervision_ratio=0.1,
+    depth_smoothing=1e-2,
+    motion_smoothing=1e-3,
+    sf_consis=1.0,
+    depth_consis=1.0,
+    rgb_consis=1.0,
+    loss_decay=1.0
 )
 
 
@@ -36,12 +42,12 @@ train_pipeline = [
     dict(type='LoadImageFromFiles'), # filenames = results['img_info']['filenames']； results['img{}'.format(i)] = img
     dict(
         type='Resize',
-        img_scale=(768, 448), # w, h; note after reading is (h=900, w=1600)
+        img_scale=(384, 224), # w, h; note after reading is (h=900, w=1600)
         multiscale_mode='value',
         keep_ratio=False),
     dict(type='Normalize', **img_norm_cfg), # results.get('img_fields', ['img'])
-    dict(type='LoadDepthImages', img_size=(448, 768), render_type='naive'), # results['seg_fields']
-    dict(type='LoadSceneFlows', img_size=(448, 768), render_type='naive'), # results['seg_fields']
+    dict(type='LoadDepthImages', img_size=(224, 384), render_type='naive'), # results['seg_fields']
+    dict(type='LoadSceneFlows', img_size=(224, 384), render_type='naive'), # results['seg_fields']
     dict(type='ImageToTensor', keys=['img{}'.format(i) for i in range(18)]),
     dict(type='Collect', keys=['img{}'.format(i) for i in range(18)] + \
                             ['depth_map{}'.format(i) for i in range(18)] + \
@@ -53,12 +59,12 @@ val_pipeline = [
     dict(type='LoadImageFromFiles'), # filenames = results['img_info']['filenames']； results['img{}'.format(i)] = img
     dict(
         type='Resize',
-        img_scale=(768, 448), # w, h; note after reading is (h=900, w=1600)
+        img_scale=(384, 224), # w, h; note after reading is (h=900, w=1600)
         multiscale_mode='value',
         keep_ratio=False),
     dict(type='Normalize', **img_norm_cfg), # results.get('img_fields', ['img'])
-    dict(type='LoadDepthImages', img_size=(448, 768), render_type='naive'), # results['seg_fields']
-    dict(type='LoadSceneFlows', img_size=(448, 768), render_type='naive'), # results['seg_fields']
+    dict(type='LoadDepthImages', img_size=(224, 384), render_type='naive'), # results['seg_fields']
+    dict(type='LoadSceneFlows', img_size=(224, 384), render_type='naive'), # results['seg_fields']
     dict(type='ImageToTensor', keys=['img{}'.format(i) for i in range(18)]),
     dict(type='Collect', keys=['img{}'.format(i) for i in range(18)] + \
                             ['depth_map{}'.format(i) for i in range(18)] + \
@@ -69,7 +75,7 @@ val_pipeline = [
 
 data = dict(
     samples_per_gpu=1,
-    workers_per_gpu=2,
+    workers_per_gpu=4,
     train=dict(
         type='NuscSpatialTemp',
         sf_path='/public/MARS/datasets/nuScenes-SF/trainval',
@@ -97,7 +103,7 @@ data = dict(
     ),
 )
 
-checkpoint_config = dict(interval=10)
+checkpoint_config = dict(interval=2)
 # yapf:disable push
 # By default we use textlogger hook and tensorboard
 # For more loggers see
@@ -123,7 +129,7 @@ workflow = [('train', 1)]
 # use a default schedule.
 # optimizer
 # This schedule is mainly used by models on nuScenes dataset
-optimizer = dict(type='AdamW', lr=2e-6, weight_decay=0.001)
+optimizer = dict(type='AdamW', lr=1e-3, weight_decay=0.001)
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(

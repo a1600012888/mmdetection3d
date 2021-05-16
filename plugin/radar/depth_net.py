@@ -194,7 +194,7 @@ class PackNetSlim01(nn.Module):
 
         #inv_depths = [F.interpolate(t_inv_depth, scale_factor=2, mode="bilinear", align_corners=False) for t_inv_depth in inv_depths]
         # ret depth pred
-        return inv_depths[0]
+        return inv_depths
 
     def forward(self, return_loss=True, rescale=False, **kwargs):
 
@@ -205,7 +205,7 @@ class PackNetSlim01(nn.Module):
             label = kwargs['depth_map']
 
             data = {'img':x, 'depth_map':label}
-            depth_pred = self.get_pred(data)
+            depth_pred = self.get_pred(data)[0]
             label = data['depth_map'].unsqueeze(dim=1)
             mask = (label > 0)
 
@@ -227,7 +227,7 @@ class PackNetSlim01(nn.Module):
         raise NotImplementedError
 
     def train_step(self, data, optimzier):
-        depth_pred = self.get_pred(data)
+        depth_pred = self.get_pred(data)[0]
         label = data['depth_map'].unsqueeze(dim=1)
         mask = (label > 0)
 

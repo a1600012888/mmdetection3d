@@ -60,7 +60,7 @@ def get_depth_metrics(pred, gt, mask=None, scale=False):
         num = pred.numel()
 
     if scale:
-        ratio = torch.median(pred) / torch.median(gt)
+        ratio = torch.median(gt) / (torch.median(pred) + 1e-4) 
         pred = pred * ratio
     else:
         ratio = 1.0
@@ -93,4 +93,32 @@ def remap_invdepth_color(disp):
     colormapped_im = (mapper.to_rgba(disp_np)[:, :, :3]) 
 
     return colormapped_im
-    
+
+
+def _gradient_x(img):
+    return img[:, :, :-1, :] - img[:, :, 1:, :]
+
+
+def _gradient_y(img):
+    return img[:, :, :, :-1] - img[:, :, :, 1:]
+
+
+def get_smooth_loss(preds, img):
+    loss = 0
+    B, _, H, W = img.shape
+    weights_x = torch.exp(-abs(_gradient_x(img)))
+    weights_y = torch.exp(-abs(_gradient_y(img)))
+    if isinstance(preds, list):
+        for pred in preds:
+            up_pred = nn.functional.interpolate(pred, size=[H, W])
+            dep_dx = abs(_gradient_x(up_pred))
+            dep_dy = abs(_gradient_y(up_pred))
+            loss1 = torch.sum(dep_dx * weights_x) / torch.numel(dep_dx)
+            loss1 += torch.sum(dep_dy * weights_y) / torch.numel(dep_dy)
+            loss += loss1
+    else:
+        dep_dx = abs(_gradient_x(preds))
+        dep_dy = abs(_gradient_y(preds))
+        loss = torch.sum(dep_dx * weights_x) / torch.numel(dep_dx)
+        loss += torch.sum(dep_dy * weights_y) / torch.numel(dep_dy)
+    return loss

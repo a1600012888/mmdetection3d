@@ -27,7 +27,7 @@ class NuscSpatialTemp(Dataset):
             self.meta_path = '/public/MARS/datasets/nuScenes-SF/meta/spatial_temp_val.json'
             self.merged_file_path = '/public/MARS/datasets/nuScenes-SF/meta/spatial_temp_merged_path_val.json'
 
-        self.data_infos = self.load_annotations()
+        self.data_infos = self.load_annotations()#[:200]
         if pipeline is not None:
             self.pipeline = Compose(pipeline)
         # not important

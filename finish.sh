@@ -1,1 +1,1 @@
-kill -9 `ps -ef |grep depth_lidar |awk '{print $2}'`
+kill -9 `ps -ef |grep radar |awk '{print $2}'`

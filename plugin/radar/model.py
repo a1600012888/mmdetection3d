@@ -3,14 +3,18 @@ from numpy.lib.arraysetops import isin
 import torch
 from torch._C import DeviceObjType
 import torch.nn as nn
+import numpy as np
 
 from mmdet.models import DETECTORS
 from .depth_net import PackNetSlim01
 from .sf_net import SFNet
 from .lidar_loss.temporal_spatial_loss import warp_ref_image_temporal, PhotometricLoss, \
-    calc_scene_flow_consistency_loss, warp_ref_image_spatial, calc_depth_consistency_loss
+    calc_scene_flow_consistency_loss, warp_ref_image_spatial, calc_depth_consistency_loss, \
+    calc_invdepth_consistency_loss, calc_stereo_rgb_loss
 
-from .utils import get_depth_metrics, remap_invdepth_color, get_smooth_loss
+from .utils import get_depth_metrics, get_motion_metrics, remap_invdepth_color,\
+    get_smooth_loss, group_smoothness,  sparsity_loss, get_motion_metrics, \
+    flow2rgb
 
 
 def scale_intrinsics(K, x_scale, y_scale):
@@ -27,15 +31,19 @@ def scale_intrinsics(K, x_scale, y_scale):
 
 @DETECTORS.register_module()
 class SpatialTempNet(nn.Module):
+    _left_swap = [i for i in range(-1,5)]
+    _right_swap = [i % 6 for i in range(1,7)]
 
     def __init__(self, depth_net_cfg, sf_net_cfg=None,
                 scale_depth=False, 
                 depth_supervision_ratio=1.0,
                 depth_smoothing=1e-2, 
                 motion_smoothing=1e-3,
+                motion_sparse=1e-3, 
                 sf_consis=1.0, 
                 depth_consis=1.0, 
                 rgb_consis=1.0, 
+                stereo_rgb_consis=1.0, 
                 loss_decay=1.0, 
                 **kwargs):
 
@@ -48,13 +56,17 @@ class SpatialTempNet(nn.Module):
         self.depth_supervision_ratio= depth_supervision_ratio
         self.depth_smoothing = depth_smoothing
         self.motion_smoothing = motion_smoothing
+        self.motion_sparse = motion_sparse
         self.sf_consis = sf_consis
         self.depth_consis = depth_consis
         self.rgb_consis = rgb_consis
-        self.loss_decay = 1.0
+        self.stereo_rgb_consis = stereo_rgb_consis
+        self.loss_decay = loss_decay
+        
 
     def forward_train(self, data, **kwargs):
         # prev: 0-5; now: 6-11; next: 12:17
+        # img0, img1, img2, ... img17
         img_keys = ['img{}'.format(i) for i in range(18)]
 
         now_depth_keys = ['depth_map{}'.format(i) for i in range(6, 12)]
@@ -97,7 +109,9 @@ class SpatialTempNet(nn.Module):
 
         # [N, 18, 3, 3]
         camera_intrinsic = data['cam_intrinsic']
-        img_x, img_y = now_imgs.size(-2), now_imgs.size(-1)
+        #img_x, img_y = now_imgs.size(-2), now_imgs.size(-1)
+        img_x, img_y = now_imgs.size(-1), now_imgs.size(-2)
+        #print(now_imgs.shape)
         scale_x = img_x / 1600
         scale_y = img_y / 900
         camera_intrinsic = scale_intrinsics(camera_intrinsic, scale_x, scale_y)
@@ -137,30 +151,47 @@ class SpatialTempNet(nn.Module):
                                             now_cam_intrin, next_cam_intrin,
                                             now_cam_pose, next_cam_pose,
                                             now2next_sf_pred)
+            
+            #rec_left_imgs = warp_ref_image_temporal(now_inv_depth, now_imgs)
 
             # [N, 1, H, W]
-            temp_rec_losses = self.photometric_loss([rec_prev_imgs], [prev_imgs]) + \
-                            self.photometric_loss([rec_next_imgs], [next_imgs])
+            temp_rec_loss = self.photometric_loss([rec_prev_imgs], [now_imgs])[0] + \
+                            self.photometric_loss([rec_next_imgs], [now_imgs])[0]
+            temp_rec_loss = temp_rec_loss.mean()
 
+            stereo_left_loss, left_rec_imgs = calc_stereo_rgb_loss(now_inv_depth, now_imgs[self._left_swap, ...], now_imgs, 
+                                                now_cam_intrin, now_cam_intrin[self._left_swap, ...], 
+                                                now_cam_pose, now_cam_pose[self._left_swap, ], )
+            stereo_right_loss, right_rec_imgs = calc_stereo_rgb_loss(now_inv_depth, now_imgs[self._right_swap, ...], now_imgs, 
+                                                now_cam_intrin, now_cam_intrin[self._right_swap, ...], 
+                                                now_cam_pose, now_cam_pose[self._right_swap, ], )
+
+            stereo_rgb_loss = stereo_left_loss + stereo_right_loss
             #from IPython import embed
             #embed()
-            consis_sf_loss, sf_valid_mask_ratio = calc_scene_flow_consistency_loss([now2prev_sf_pred, now2next_sf_pred], now_cam_intrin, now_cam_pose, now_inv_depth)
-            consis_inv_dep_loss, valid_mask_ratio = calc_depth_consistency_loss(now_inv_depth, now_cam_intrin, now_cam_pose)
-            consis_inv_dep_loss = consis_inv_dep_loss
-            temp_rec_loss = temp_rec_losses[0].mean(dim=0).mean()    
-
             depth_pred = 1.0 / torch.clamp(now_inv_depth, 1e-6)
-            
+
+            consis_sf_loss, sf_valid_mask_ratio = calc_scene_flow_consistency_loss([now2prev_sf_pred, now2next_sf_pred], now_cam_intrin, now_cam_pose, now_inv_depth)
+            #consis_inv_dep_loss, valid_mask_ratio = calc_invdepth_consistency_loss(now_inv_depth, now_cam_intrin, now_cam_pose)
+            consis_dep_loss, valid_mask_ratio = calc_depth_consistency_loss(depth_pred, now_cam_intrin, now_cam_pose)
+            consis_dep_loss = consis_dep_loss
+                
+
             depth_smoothing_loss = get_smooth_loss(depth_pred, now_imgs)
-            motion_smoothing_loss = get_smooth_loss(now2prev_sf_pred, now_imgs) + get_smooth_loss(now2next_sf_pred, now_imgs)
+            #motion_smoothing_loss = get_smooth_loss(now2prev_sf_pred, now_imgs) + get_smooth_loss(now2next_sf_pred, now_imgs)
+            motion_smoothing_loss = group_smoothness(now2prev_sf_pred) + group_smoothness(now2next_sf_pred) 
+            motion_sparse_loss = sparsity_loss(now2prev_sf_pred) + sparsity_loss(now2next_sf_pred)
 
             loss = self.rgb_consis * temp_rec_loss
+            loss = self.stereo_rgb_consis * stereo_rgb_loss
             loss = loss + self.sf_consis * consis_sf_loss
-            loss = loss + self.depth_consis * consis_inv_dep_loss
+            loss = loss + self.depth_consis * consis_dep_loss
             loss = loss + self.depth_smoothing * depth_smoothing_loss 
             loss = loss + self.motion_smoothing * motion_smoothing_loss
+            loss = loss + self.motion_sparse * motion_sparse_loss
             if self.depth_supervision_ratio > 0:
-
+                
+                # TODO: smooth L1;  imbalance L1
                 depth_sup_loss = torch.abs((now_depth - depth_pred)) * mask
                 depth_sup_loss = torch.sum(depth_sup_loss) / torch.sum(mask)
 
@@ -170,37 +201,40 @@ class SpatialTempNet(nn.Module):
                 metrics = get_depth_metrics(depth_pred, now_depth, mask, scale=self.scale_depth)
                 # abs_diff, abs_rel, sq_rel, rmse, rmse_log
                 metrics = [m.item() for m in metrics]
+                # depth_scale = median(gt_depth) / median(pred_depth)
                 abs_diff, abs_rel, sq_rel, rmse, rmse_log, depth_scale = metrics
 
                 # add visualization map
-                if pred_idx == (len(now_inv_depth_preds) -1):
-                    std = torch.tensor([58.395, 57.12, 57.375]).cuda().view(1, -1, 1, 1)
-                    mean = torch.tensor([123.675, 116.28, 103.53]).cuda().view(1, -1, 1, 1)
-                    img = now_imgs * std + mean
-                    img = img / 255.0
+                if pred_idx == 0:
+                    #std = torch.tensor([58.395, 57.12, 57.375]).cuda().view(1, -1, 1, 1)
+                    #mean = torch.tensor([123.675, 116.28, 103.53]).cuda().view(1, -1, 1, 1)
+                    #img = now_imgs * std + mean
+                    #img = img / 255.0
+                    img = now_imgs
 
                     inv_depth_pred_img0 = now_inv_depth[0].clamp(min=1e-5)
-                    inv_depth_img0 = 1. / now_depth.clamp(min=1e-6)
-                    inv_depth_img0[now_depth <= 0.] = 0.
-                    inv_depth_img0 = inv_depth_img0[0]
 
                     cmap_inv_depth_pred_img0 = remap_invdepth_color(inv_depth_pred_img0)
-                    cmap_inv_depth = remap_invdepth_color(inv_depth_img0)
+                    
 
                     visualization_map = {
                         'inv_depth_pred': cmap_inv_depth_pred_img0.transpose(2,0,1),
-                        'inv_depth_gt': cmap_inv_depth.transpose(2,0,1),
-                        'img': img[0],
+                        'img': img[0].detach().cpu().numpy(),
+                        'rec_from_prev': rec_prev_imgs[0].detach().cpu().numpy(),
+                        'rec_from_next': rec_next_imgs[0].detach().cpu().numpy(),
+                        'rec_from_left': left_rec_imgs[0].detach().cpu().numpy(),
+                        'rec_from_right': right_rec_imgs[0].detach().cpu().numpy(),
                     }
 
                 log_vars = {'loss': loss.item(),
                             'temp_rec_loss': temp_rec_loss.item(),
-                            'inv_depth_consis_loss': consis_inv_dep_loss.item(),
+                            'stereo_rgb_loss': stereo_rgb_loss.item(), 
+                            'depth_consis_loss': consis_dep_loss.item(),
                             'sceneflow_consis_loss': consis_sf_loss.item(),
                             'depth_smoothing': depth_smoothing_loss.item(), 
                             'motion_smoothing': motion_smoothing_loss.item(), 
+                            'motion_sparse_loss': motion_sparse_loss.item(), 
                             'valid_mask_ratio': valid_mask_ratio,
-                            'sf_valid_mask_ratio': sf_valid_mask_ratio,
                             'sparsity': sparsity.item(),
                             'abs_diff': abs_diff, 'abs_rel': abs_rel,
                             'sq_rel': sq_rel, 'rmse': rmse,
@@ -232,7 +266,33 @@ class SpatialTempNet(nn.Module):
             final_log_vars[name] = sum(value_list) / len(value_list)
             #print('mean-', len(value_list))
 
-        return final_loss, final_log_vars, visualization_map
+        with torch.no_grad():
+            fused_motion = (now2next_sf_pred - now2prev_sf_pred) / 2
+            motion_metrics = get_motion_metrics(fused_motion, 
+                                                now_sf, scale=self.scale_depth)
+            motion_metrics = [m.item() for m in motion_metrics]
+            epe, epe_rel, motion_scale = motion_metrics
+            final_log_vars['epe'] = epe
+            final_log_vars['epe_rel'] = epe_rel
+            final_log_vars['motion_scale'] = motion_scale
+
+            visual_motion = fused_motion[0]
+            visual_motion = flow2rgb(visual_motion.detach().cpu().numpy().transpose(1,2,0)).transpose(2, 0, 1)
+            cat_a, cat_b = visualization_map['img'], visualization_map['inv_depth_pred']
+            pred_visual = np.concatenate([cat_a, cat_b, visual_motion], axis=-1)
+
+            time_warp_visual = np.concatenate([cat_a, 
+                                visualization_map['rec_from_prev'], 
+                                visualization_map['rec_from_next']], axis=-1)
+            spatial_warp_visual = np.concatenate([cat_a, 
+                                visualization_map['rec_from_right'], 
+                                visualization_map['rec_from_left']], axis=-1)
+                                
+            final_visualization_map = {'img-depth-motion': pred_visual, 
+                                        'time_warp': time_warp_visual, 
+                                        'spatial_warp': spatial_warp_visual}
+
+        return final_loss, final_log_vars, final_visualization_map
 
     def forward(self, return_loss=True, rescale=False, **data):
         if not return_loss:

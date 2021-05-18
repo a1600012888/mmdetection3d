@@ -129,7 +129,7 @@ workflow = [('train', 1)]
 # use a default schedule.
 # optimizer
 # This schedule is mainly used by models on nuScenes dataset
-optimizer = dict(type='AdamW', lr=1e-2, weight_decay=0.001)
+optimizer = dict(type='AdamW', lr=1e-3, weight_decay=0.001)
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(

@@ -49,7 +49,7 @@ def get_sf_ann(ann_token:str, timestamp, points, nusc):
 
     is_valid_points = is_points_in_box(box, deepcopy(points))
     valid_points = points[:, is_valid_points]
-    print('number valid points: {} - gt:{}'.format(valid_points.shape[1], ann_data['num_lidar_pts']))
+    #print('number valid points: {} - gt:{}'.format(valid_points.shape[1], ann_data['num_lidar_pts']))
     #assert valid_points.shape[1] == ann_data['num_lidar_pts'], 'num of lidar pts not right! {} {}'.format(valid_points.shape[1], ann_data['num_lidar_pts'])
 
     box_center = box.center

@@ -46,7 +46,7 @@ def warp_ref_image_temporal(inv_depth, ref_image, K, ref_K, extrinsics, ref_extr
     ref_cams = Camera(K=ref_K, Tcw=Pose(ref_extrinsics)).to(device)
     # View synthesis
     depth = inv2depth(inv_depth)
-    ref_warped,ref_coords = view_synthesis(ref_image, depth, ref_cams, cams, scene_flow,
+    ref_warped, ref_coords = view_synthesis(ref_image, depth, ref_cams, cams, scene_flow,
                               padding_mode=padding_mode)
     return ref_warped
 
@@ -86,8 +86,22 @@ def warp_ref_image_spatial(inv_depth, ref_image, K, ref_K, extrinsics_1, extrins
     ref_warped, ref_coord = view_synthesis(ref_image, depth, ref_cam, cam,
                           scene_flow=None, padding_mode=padding_mode)
     # Calculate valid_points_mask
+    # N, H, W
     valid_points_mask = ref_coord.abs().max(dim=-1)[0] <= 1
     return ref_warped, valid_points_mask
+
+
+def calc_stereo_rgb_loss(inv_depth, ref_image, target_image, 
+                K, ref_K, extrinsics_1, extrinsics_2):
+    
+    warped_image, valid_mask = warp_ref_image_spatial(inv_depth, ref_image, 
+                                        K, ref_K, extrinsics_1, extrinsics_2)
+    
+    image_diff = torch.abs(warped_image - target_image)
+    #print(image_diff.shape, valid_mask.shape)
+    l1_loss = torch.sum(image_diff * valid_mask) / torch.numel(valid_mask)
+    return l1_loss, warped_image
+
 
 
 def warp_ref_image_temporal_spatial(inv_depth, ref_image, K, ref_K, extrinsics_1, extrinsics_2,scene_flow):
@@ -232,8 +246,8 @@ def calc_scene_flow_consistency_loss(scene_flows, intrinsic, extrinsic, inv_dept
         for l_r, ref_scene_flow in enumerate(ref_scene_flows[time]):  # iterate over left and right
             # Project target image to ref image
             ref_cam = Camera(K=intrinsics_2[l_r].float(), Tcw=Pose(extrinsics_2[l_r])).to(device) # left or right cam
-            cam_points = cam.reconstruct(depth, frame='c')
-            world_points_from_cam = cam.Tcw @ cam_points
+            world_points_from_cam = cam.reconstruct(depth, frame='w')
+            
             ref_coords = ref_cam.project(world_points_from_cam, frame='w')
             # Interpolate scene flow
             warped_target_scene_flow_ref = funct.grid_sample(ref_scene_flow, ref_coords, mode='bilinear',
@@ -244,13 +258,13 @@ def calc_scene_flow_consistency_loss(scene_flows, intrinsic, extrinsic, inv_dept
                                 @ scene_flow.view(B,-1,DH*DW)).view(B,-1,DH,DW)
             valid_points_mask = ref_coords.abs().max(dim=-1)[0] <= 1
             valid_points_ratios.append(valid_points_mask.type(torch.float).mean().item())
-            consistency_losses.append(torch.abs(warped_target_scene_flow_ref-target_scene_flow_ref).mean(1).unsqueeze(1)
+            consistency_losses.append(torch.abs(warped_target_scene_flow_ref-target_scene_flow_ref).mean(1)
                                             *valid_points_mask)
     valid_points_ratio = sum(valid_points_ratios) / len(valid_points_ratios)
+    #print(torch.stack(consistency_losses, 0).shape, 'in motion consis')
+    return torch.mean(torch.stack(consistency_losses, 0)), valid_points_ratio
 
-    return reduce_loss(torch.cat(consistency_losses,1)), valid_points_ratio
-
-def calc_depth_consistency_loss(inv_depth, intrinsic, extrinsic):
+def calc_invdepth_consistency_loss(inv_depth, intrinsic, extrinsic):
     """
     Calculates the consistency loss for multi-cameras pose
     Parameters
@@ -295,26 +309,101 @@ def calc_depth_consistency_loss(inv_depth, intrinsic, extrinsic):
     
         # Project target image to ref image to get ref_cords
         world_points_from_cam = cam.reconstruct(depth, frame='w')
+
+        # [6, H, W, 2]
         ref_coords = ref_cam.project(world_points_from_cam, frame='w')
         
         # transform ref_depth to tgt view
         world_points_from_ref_cam = ref_cam.reconstruct(inv2depth(ref_inv_depth), frame='w')
         points_to_tgt_camera = cam.Twc @  world_points_from_ref_cam
+        # [6, 1, H, W]
         ref_invdepth_in_tft_camera = depth2inv(points_to_tgt_camera[:, [-1], ...])
 
         # warp ref inv depth to reconstruct tgt depth
+        # 6, 1, H, W
         warped_target_inv_depth = funct.grid_sample(ref_invdepth_in_tft_camera, ref_coords, mode='bilinear',
                                 padding_mode=padding_mode, align_corners=True)
 
+        # 6, H, W
         valid_points_mask = ref_coords.abs().max(dim=-1)[0] <= 1
         # record the ratio of valid pixels
         valid_points_ratios.append(valid_points_mask.type(torch.float).mean().item())
-        consistency_losses.append(torch.abs(warped_target_inv_depth - inv_depth).mean(1).unsqueeze(1)
+        # 6, H ,W
+        consistency_losses.append(torch.abs(warped_target_inv_depth - inv_depth).mean(1)
                                         *valid_points_mask)
 
     valid_points_ratio = sum(valid_points_ratios) / len(valid_points_ratios)
+    
+    consis_loss = torch.mean(torch.stack(consistency_losses, 0))
+    
+    return consis_loss, valid_points_ratio
 
-    return reduce_loss(torch.cat(consistency_losses,1)), valid_points_ratio
+def calc_depth_consistency_loss(depth_pred, intrinsic, extrinsic):
+    """
+    Calculates the consistency loss for multi-cameras pose
+    Parameters
+    ----------
+    depth_pred :[6,1,H,W]
+    intrinsic: torch.Tensor [6,3,3] 
+        intrinsic matrix for 6 cameras
+    extrinsics: torch.Tensor [6,4,4] c->w
+        Extrinsics matrix for 6 cameras
+
+    Returns
+    -------
+    consistency_loss : torch.Tensor [1]
+    valid_points_ratio: float, measure the percent of valid pixels
+        Consistency loss
+    """
+
+    assert depth_pred.dim() > 2, "Depth should have 4 dim, (B,1,H,W)"
+    device = depth_pred.get_device() if depth_pred.get_device()>=0 else 'cpu'
+
+    # Construct ref intrinsics, extrinsics in order: [right,left]
+    extrinsics_1 = extrinsic
+    extrinsics_2 = [extrinsic[right_swap,...], extrinsic[left_swap,...]]
+    intrinsics_1 = intrinsic
+    intrinsics_2 = [intrinsic[right_swap,...], intrinsic[left_swap,...]]
+
+    ref_depth_preds = [
+        depth_pred[right_swap, ...], 
+        depth_pred[left_swap, ...], 
+    ]
+    # depth_preds -> depths
+    depth = depth_pred
+    B, _, DH, DW = depth.shape
+    consistency_losses = []
+    cam = Camera(K=intrinsics_1, Tcw=Pose(extrinsics_1)).to(device) # origin cam
+    # Calculate right camera scene flow consistency loss
+    
+    valid_points_ratios = []
+    for i in range(2):
+        ref_cam = Camera(K=intrinsics_2[i], Tcw=Pose(extrinsics_2[i])).to(device)
+        ref_depth_pred = ref_depth_preds[i]
+    
+        # Project target image to ref image to get ref_cords
+        world_points_from_cam = cam.reconstruct(depth, frame='w')
+        ref_coords = ref_cam.project(world_points_from_cam, frame='w')
+        
+        # transform ref_depth to tgt view
+        world_points_from_ref_cam = ref_cam.reconstruct(ref_depth_pred, frame='w')
+        points_to_tgt_camera = cam.Twc @  world_points_from_ref_cam
+        ref_depth_in_tft_camera = points_to_tgt_camera[:, [-1], ...]
+
+        # warp ref inv depth to reconstruct tgt depth
+        warped_target_depth_pred = funct.grid_sample(ref_depth_in_tft_camera, ref_coords, mode='bilinear',
+                                padding_mode=padding_mode, align_corners=True)
+
+        # 6, H, W
+        valid_points_mask = ref_coords.abs().max(dim=-1)[0] <= 1
+        # record the ratio of valid pixels
+        valid_points_ratios.append(valid_points_mask.type(torch.float).mean().item())
+        consistency_losses.append(torch.abs(warped_target_depth_pred - depth_pred).mean(1)
+                                        *valid_points_mask)
+
+    valid_points_ratio = sum(valid_points_ratios) / len(valid_points_ratios)
+    #print(torch.stack(consistency_losses, 0).shape, 'in depth consis', valid_points_mask.shape)
+    return torch.mean(torch.stack(consistency_losses,dim=0)), valid_points_ratio
 
 
 def reduce_loss(losses_reduce, op='min'):

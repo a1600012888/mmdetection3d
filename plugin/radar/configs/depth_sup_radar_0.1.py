@@ -24,19 +24,22 @@ model = dict(
     depth_net_cfg={'version': '1A', },
     sf_net_cfg=None,
     scale_depth=True,
-    depth_supervision_ratio=0.1,
+    depth_supervision_ratio=1.0,
     depth_smoothing=1e-2,
-    motion_smoothing=1e-3,
+    motion_smoothing=0.1,
+    motion_sparse=0.1,
     sf_consis=1.0,
     depth_consis=1.0,
     rgb_consis=1.0,
-    loss_decay=1.0
+    stereo_rgb_consis=0.1,
+    loss_decay=1.0,
 )
 
 
 file_client_args = dict(backend='disk')
 img_norm_cfg = dict(
-    mean=[58.395, 57.12, 57.375], std=[123.675, 116.28, 103.53], to_rgb=True)
+    mean=[0.0, 0.0, 0.0], std=[255.0, 255.0, 255.0], to_rgb=True)
+#mean=[58.395, 57.12, 57.375], std=[123.675, 116.28, 103.53], to_rgb=True)
 
 train_pipeline = [
     dict(type='LoadImageFromFiles'), # filenames = results['img_info']['filenames']； results['img{}'.format(i)] = img
@@ -129,7 +132,7 @@ workflow = [('train', 1)]
 # use a default schedule.
 # optimizer
 # This schedule is mainly used by models on nuScenes dataset
-optimizer = dict(type='AdamW', lr=1e-3, weight_decay=0.001)
+optimizer = dict(type='AdamW', lr=2e-3, weight_decay=0.001)
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(
@@ -137,11 +140,11 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=1000,
     warmup_ratio=1.0 / 1000,
-    step=[36, 48],
+    step=[24, 32],
 )
 momentum_config = None
 
 # runtime settings
-total_epochs = 60
+total_epochs = 40
 #load_from='/public/MARS/surrdet/tyz/depth-net.pth'
 load_from=None

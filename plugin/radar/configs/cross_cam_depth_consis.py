@@ -25,21 +25,18 @@ model = dict(
     sf_net_cfg=None,
     scale_depth=True,
     depth_supervision_ratio=-1,
-    depth_smoothing=1e-2,
-    motion_smoothing=1e-2,
-    motion_sparse=0.1,
-    sf_consis=1.0,
-    depth_consis=1.0,
-    rgb_consis=1.0,
-    stereo_rgb_consis=0.1,
-    loss_decay=1.0,
+    depth_smoothing=0.0,
+    motion_smoothing=0.0,
+    sf_consis=0.0,
+    depth_consis=5.0,
+    rgb_consis=0.0,
+    loss_decay=0.0
 )
 
 
 file_client_args = dict(backend='disk')
 img_norm_cfg = dict(
-    mean=[0.0, 0.0, 0.0], std=[255.0, 255.0, 255.0], to_rgb=True)
-#mean=[58.395, 57.12, 57.375], std=[123.675, 116.28, 103.53], to_rgb=True)
+    mean=[58.395, 57.12, 57.375], std=[123.675, 116.28, 103.53], to_rgb=True)
 
 train_pipeline = [
     dict(type='LoadImageFromFiles'), # filenames = results['img_info']['filenames']； results['img{}'.format(i)] = img
@@ -140,11 +137,11 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=1000,
     warmup_ratio=1.0 / 1000,
-    step=[24, 32],
+    step=[36, 48],
 )
 momentum_config = None
 
 # runtime settings
-total_epochs = 40
+total_epochs = 60
 #load_from='/public/MARS/surrdet/tyz/depth-net.pth'
 load_from=None

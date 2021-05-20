@@ -27,12 +27,12 @@ model = dict(
     scale_depth_for_temp=False,
     depth_supervision_ratio=-1,
     depth_smoothing=1e-3,
-    motion_smoothing=4e-1,
+    motion_smoothing=5e-1,
     motion_sparse=2e-1,
-    sf_consis=1e-3,
-    depth_consis=1e-3,
+    sf_consis=0,
+    depth_consis=0,
     rgb_consis=0.1,
-    stereo_rgb_consis=5.0,
+    stereo_rgb_consis=10.0,
     loss_decay=1.0,
 )
 

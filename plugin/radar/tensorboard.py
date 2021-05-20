@@ -57,7 +57,7 @@ class TensorboardLoggerHook2(LoggerHook):
                 self.writer.add_scalar(tag, runner.log_buffer.output[var],
                                        runner.iter)
         for var in runner.outputs:
-            if var in ['img-depth-motion', 'time_warp', 'spatial_warp']:
+            if var in ['img-depth-motion', 'time_warp', 'spatial_warp', 'image_time', 'image_spatial']:
                 tag = f'{var}/{runner.mode}'
                 img = runner.outputs[var]
                 self.writer.add_image(tag, img, runner.iter)
@@ -81,7 +81,7 @@ class TensorboardLoggerHook2(LoggerHook):
     @master_only
     def after_epoch(self, runner):
         for var in runner.outputs:
-            if var in ['img-depth-motion', 'time_warp', 'spatial_warp']:
+            if var in ['img-depth-motion', 'time_warp', 'spatial_warp', 'image_time', 'image_spatial']:
                 tag = f'{var}/{runner.mode}'
                 img = runner.outputs[var]
                 self.writer.add_image(tag, img, runner.iter)

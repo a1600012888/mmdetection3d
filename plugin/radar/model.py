@@ -36,6 +36,7 @@ class SpatialTempNet(nn.Module):
 
     def __init__(self, depth_net_cfg, sf_net_cfg=None,
                 scale_depth=False, 
+                scale_depth_for_temp=True, 
                 depth_supervision_ratio=1.0,
                 depth_smoothing=1e-2, 
                 motion_smoothing=1e-3,
@@ -52,6 +53,7 @@ class SpatialTempNet(nn.Module):
         self.sf_net = SFNet()
         self.photometric_loss = PhotometricLoss(alpha=0.1, clip_loss=0.5, C1=1e-4, C2=9e-4)
         self.scale_depth = scale_depth
+        self.scale_depth_for_temp = scale_depth_for_temp
         # < 0 means no supervised depth loss
         self.depth_supervision_ratio= depth_supervision_ratio
         self.depth_smoothing = depth_smoothing
@@ -143,11 +145,19 @@ class SpatialTempNet(nn.Module):
             else:
                 now_inv_depth = now_inv_depth_raw
 
-            rec_prev_imgs = warp_ref_image_temporal(now_inv_depth, prev_imgs,
+            depth_pred = 1.0 / torch.clamp(now_inv_depth, 1e-6)
+            if self.scale_depth_for_temp:
+                depth_scale = torch.median(now_depth[mask]) / (torch.median(depth_pred[mask]) + 1e-4) 
+                depth_scale = depth_scale.detach()
+            else:
+                depth_scale = 1.0
+            
+            # scaling the depth prediction!
+            rec_prev_imgs = warp_ref_image_temporal(now_inv_depth / depth_scale, prev_imgs,
                                             now_cam_intrin, prev_cam_intrin,
                                             now_cam_pose, prev_cam_pose,
                                             now2prev_sf_pred)
-            rec_next_imgs = warp_ref_image_temporal(now_inv_depth, next_imgs,
+            rec_next_imgs = warp_ref_image_temporal(now_inv_depth / depth_scale, next_imgs,
                                             now_cam_intrin, next_cam_intrin,
                                             now_cam_pose, next_cam_pose,
                                             now2next_sf_pred)
@@ -155,6 +165,7 @@ class SpatialTempNet(nn.Module):
             #rec_left_imgs = warp_ref_image_temporal(now_inv_depth, now_imgs)
 
             # [N, 1, H, W]
+            
             temp_rec_loss = self.photometric_loss([rec_prev_imgs], [now_imgs])[0] + \
                             self.photometric_loss([rec_next_imgs], [now_imgs])[0]
             temp_rec_loss = temp_rec_loss.mean()
@@ -167,26 +178,27 @@ class SpatialTempNet(nn.Module):
                                                 now_cam_pose, now_cam_pose[self._right_swap, ], )
 
             stereo_rgb_loss = stereo_left_loss + stereo_right_loss
+            
+            consis_sf_loss, sf_valid_mask_ratio = calc_scene_flow_consistency_loss([now2prev_sf_pred, now2next_sf_pred], now_cam_intrin, now_cam_pose, now_inv_depth)
+            
+            # scale the depth.  depth-consis tend to make depth prediction smaller
+            consis_dep_loss, valid_mask_ratio = calc_depth_consistency_loss(depth_pred, now_cam_intrin, now_cam_pose)
+            
+            # TODO: scale or not?
+            depth_smoothing_loss = get_smooth_loss(depth_pred, now_imgs)
+
+            motion_smoothing_loss = group_smoothness(now2prev_sf_pred) + \
+                                    group_smoothness(now2next_sf_pred) 
+            motion_sparse_loss = sparsity_loss(now2prev_sf_pred) + \
+                                 sparsity_loss(now2next_sf_pred)
+
             #from IPython import embed
             #embed()
-            depth_pred = 1.0 / torch.clamp(now_inv_depth, 1e-6)
-
-            consis_sf_loss, sf_valid_mask_ratio = calc_scene_flow_consistency_loss([now2prev_sf_pred, now2next_sf_pred], now_cam_intrin, now_cam_pose, now_inv_depth)
-            #consis_inv_dep_loss, valid_mask_ratio = calc_invdepth_consistency_loss(now_inv_depth, now_cam_intrin, now_cam_pose)
-            consis_dep_loss, valid_mask_ratio = calc_depth_consistency_loss(depth_pred, now_cam_intrin, now_cam_pose)
-            consis_dep_loss = consis_dep_loss
-                
-
-            depth_smoothing_loss = get_smooth_loss(depth_pred, now_imgs)
-            #motion_smoothing_loss = get_smooth_loss(now2prev_sf_pred, now_imgs) + get_smooth_loss(now2next_sf_pred, now_imgs)
-            motion_smoothing_loss = group_smoothness(now2prev_sf_pred) + group_smoothness(now2next_sf_pred) 
-            motion_sparse_loss = sparsity_loss(now2prev_sf_pred) + sparsity_loss(now2next_sf_pred)
-
             loss = self.rgb_consis * temp_rec_loss
-            loss = self.stereo_rgb_consis * stereo_rgb_loss
+            loss = loss + self.stereo_rgb_consis * stereo_rgb_loss
             loss = loss + self.sf_consis * consis_sf_loss
             loss = loss + self.depth_consis * consis_dep_loss
-            loss = loss + self.depth_smoothing * depth_smoothing_loss 
+            loss = loss + self.depth_smoothing * depth_smoothing_loss
             loss = loss + self.motion_smoothing * motion_smoothing_loss
             loss = loss + self.motion_sparse * motion_sparse_loss
             if self.depth_supervision_ratio > 0:
@@ -212,7 +224,8 @@ class SpatialTempNet(nn.Module):
                     #img = img / 255.0
                     img = now_imgs
 
-                    inv_depth_pred_img0 = now_inv_depth[0].clamp(min=1e-5)
+                    # scale the depth for visualization
+                    inv_depth_pred_img0 = (now_inv_depth[0] / depth_scale).clamp(min=1e-5)
 
                     cmap_inv_depth_pred_img0 = remap_invdepth_color(inv_depth_pred_img0)
                     
@@ -220,6 +233,10 @@ class SpatialTempNet(nn.Module):
                     visualization_map = {
                         'inv_depth_pred': cmap_inv_depth_pred_img0.transpose(2,0,1),
                         'img': img[0].detach().cpu().numpy(),
+                        'prev_img': prev_imgs[0].detach().cpu().numpy(),
+                        'next_img': next_imgs[0].detach().cpu().numpy(),
+                        'left_img': now_imgs[self._left_swap, ][0].detach().cpu().numpy(),
+                        'right_img': now_imgs[self._right_swap][0].detach().cpu().numpy(),
                         'rec_from_prev': rec_prev_imgs[0].detach().cpu().numpy(),
                         'rec_from_next': rec_next_imgs[0].detach().cpu().numpy(),
                         'rec_from_left': left_rec_imgs[0].detach().cpu().numpy(),
@@ -268,7 +285,7 @@ class SpatialTempNet(nn.Module):
 
         with torch.no_grad():
             fused_motion = (now2next_sf_pred - now2prev_sf_pred) / 2
-            motion_metrics = get_motion_metrics(fused_motion, 
+            motion_metrics = get_motion_metrics(fused_motion*2.0,  # ajacent key_frames 0.5s 
                                                 now_sf, scale=self.scale_depth)
             motion_metrics = [m.item() for m in motion_metrics]
             epe, epe_rel, motion_scale = motion_metrics
@@ -284,13 +301,20 @@ class SpatialTempNet(nn.Module):
             time_warp_visual = np.concatenate([cat_a, 
                                 visualization_map['rec_from_prev'], 
                                 visualization_map['rec_from_next']], axis=-1)
-            spatial_warp_visual = np.concatenate([cat_a, 
-                                visualization_map['rec_from_right'], 
-                                visualization_map['rec_from_left']], axis=-1)
-                                
+            spatial_warp_visual = np.concatenate([visualization_map['rec_from_left'], 
+                                                cat_a, 
+                                                visualization_map['rec_from_right'], ], axis=-1)
+            image_prev_now_next = np.concatenate([visualization_map['prev_img'], 
+                                        cat_a, 
+                                        visualization_map['prev_img'],], axis=-1)
+            image_left_now_right = np.concatenate([visualization_map['left_img'], 
+                                        cat_a, 
+                                        visualization_map['right_img'],], axis=-1)
             final_visualization_map = {'img-depth-motion': pred_visual, 
                                         'time_warp': time_warp_visual, 
-                                        'spatial_warp': spatial_warp_visual}
+                                        'spatial_warp': spatial_warp_visual, 
+                                        'image_time': image_prev_now_next, 
+                                        'image_sptial': image_left_now_right, }
 
         return final_loss, final_log_vars, final_visualization_map
 

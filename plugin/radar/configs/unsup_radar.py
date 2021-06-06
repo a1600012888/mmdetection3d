@@ -32,7 +32,7 @@ model = dict(
     sf_consis=1e-3,
     depth_consis=1e-3,
     rgb_consis=0.1,
-    stereo_rgb_consis=5.0,
+    stereo_rgb_consis=1.0,
     loss_decay=1.0,
 )
 

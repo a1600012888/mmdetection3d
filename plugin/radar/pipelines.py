@@ -63,6 +63,12 @@ class LoadDepthImages(object):
         i = 0
         results['seg_fields'] = []
         for npy_file_path in npy_file_paths:
+            if npy_file_path is None:
+                depth_map = np.zeros((*self.img_size, 1))
+                results['seg_fields'].append('depth_map{}'.format(i))
+                results['depth_map{}'.format(i)] = depth_map
+                i += 1
+                continue
             points = np.load(npy_file_path) # of shape [N, 3]: x, y, depth
 
             depth_map = np.zeros(self.img_size)
@@ -74,7 +80,7 @@ class LoadDepthImages(object):
                 depth_map = self.naive_depth_render(points, depth_map)
 
             results['seg_fields'].append('depth_map{}'.format(i))
-            results['depth_map{}'.format(i)] = depth_map
+            results['depth_map{}'.format(i)] = depth_map.astype(np.float32)
             i += 1
             #depth_map[:,:, np.newaxis]
             #print('debbug', results['depth_map'].shape, results['img'].shape, type(results['img']), '\n')

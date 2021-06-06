@@ -189,6 +189,7 @@ class PackNetSlim01(nn.Module):
 
         if self.training:
             inv_depths = [inv_depth1, inv_depth2, inv_depth3, inv_depth4]
+            #inv_depths = [inv_depth1]
         else:
             inv_depths = [inv_depth1]
 

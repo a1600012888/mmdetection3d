@@ -147,7 +147,6 @@ def get_temporal_spatial_data(save_dir='/public/MARS/datasets/nuScenes-SF/meta')
         else:
             val_meta.append(cam_filename_dict)
     
-    
     train_meta_path = os.path.join(save_dir, 'spatial_temp_train.json')
     val_meta_path = os.path.join(save_dir, 'spatial_temp_val.json')
 

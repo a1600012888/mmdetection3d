@@ -357,7 +357,7 @@ def _main():
 
     samples = nusc.sample
 
-    save_dir = '/public/MARS/datasets/nuScenes-SF/trainval'
+    save_dir = '/public/MARS/datasets/nuScenes-SF/trainval-camera'
     meta = {}
     for sample in tqdm(samples):
         sample_token = sample['token']
@@ -383,6 +383,6 @@ def _test_visual(idx=0):
     # visualize_sample(samples[3]['token'], nusc)
 
 if __name__ == '__main__':
-    #_main()
+    _main()
     
-    _test_visual()
+    #_test_visual()

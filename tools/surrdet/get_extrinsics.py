@@ -57,5 +57,49 @@ def get_pose_intrinsic(save_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pos
         json.dump(cam_token2cam_intext, f)
     
 
+def get_pose_intrinsic_v2(save_path='/public/MARS/datasets/nuScenes-SF/meta/cam_pose_intrinsic_v3.json'):
+
+    split = 'train'
+    data_path = 'data/nuscenes/'
+    nusc = NuScenes(
+        version=SPLITS[split], dataroot=data_path, verbose=True)
+    samples = nusc.sample
+
+    cam_token2cam_intext = {}
+
+    pointer_keys = ['prev', 'next']
+    for sample in tqdm(samples):
+        for cam_name in CamNames:
+            cam_token = sample['data'][cam_name]
+            cam_tokens = [cam_token]
+            cam_data = nusc.get('sample_data', cam_token)
+            for key in pointer_keys:
+                new_token = cam_data[key]
+                if new_token == '':
+                    continue
+                cam_tokens.append(new_token)
+            
+            for cam_token in cam_tokens:
+                cam_data = nusc.get('sample_data', cam_token)
+                ego_pose = nusc.get('ego_pose', cam_data['ego_pose_token'])
+                cam_cs = nusc.get('calibrated_sensor', cam_data['calibrated_sensor_token'])
+
+                # used to transform from ego to global
+                pose_matrix = quat_trans2matrix(ego_pose['rotation'], ego_pose['translation'])
+                # used to transform from cameral to ego
+                cam_pose = quat_trans2matrix(cam_cs['rotation'], cam_cs['translation'])
+
+                cam_pose_world = np.matmul(pose_matrix, cam_pose)
+
+                ret = {'pose': cam_pose_world.tolist()}
+                ret['intrinsic'] = cam_cs['camera_intrinsic']
+                ret['timestamp'] = cam_data['timestamp']
+                print(cam_data['timestamp'])
+                cam_token2cam_intext[cam_token] = ret
+    
+    with open(save_path, 'w') as f:
+        json.dump(cam_token2cam_intext, f)
+
+
 if __name__ == '__main__':
-    get_pose_intrinsic()
+    get_pose_intrinsic_v2()

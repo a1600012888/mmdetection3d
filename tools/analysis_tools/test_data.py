@@ -11,6 +11,9 @@ from mmdet3d.models import build_detector
 from tools.misc.fuse_conv_bn import fuse_module
 import os
 
+from plugin.radar-v3.utils import get_depth_metrics, get_motion_metrics, remap_invdepth_color,\
+    get_smooth_loss, group_smoothness,  sparsity_loss, get_motion_metrics, \
+    flow2rgb, convert_res_sf_to_sf, sf_sparse_loss
 
 def parse_args():
     parser = argparse.ArgumentParser(description='MMDet benchmark a model')
@@ -81,27 +84,56 @@ def main():
         torch.cuda.synchronize()
         start_time = time.perf_counter()
 
-        from IPython import embed
-        embed()
+        img_keys = ['img{}'.format(i) for i in range(18)]
+        now_depth_keys = ['depth_map{}'.format(i) for i in range(6, 12)]
+        now_sf_keys = ['sf_map{}'.format(i) for i in range(6, 12)]
+
+        # Imgs!
+        # shape [18, N, 3, H, W]
+        imgs = [data[tmp_key] for tmp_key in img_keys]
+        prev_imgs, now_imgs, next_imgs = imgs[0:6], imgs[6:12], imgs[12:]
+        # shape [N*6, 3, H, W]
+        prev_imgs = torch.cat(prev_imgs, dim=0)
+        now_imgs = torch.cat(now_imgs, dim=0)
+        next_imgs = torch.cat(next_imgs, dim=0)
+
+        now_depth = torch.cat([data[tmp_key] for tmp_key in now_depth_keys], dim=0)
+        
+        now_depth = now_depth.unsqueeze(dim=1)
+        
+        now_sf = torch.cat([data[tmp_key] for tmp_key in now_sf_keys], dim=0)
+ 
+        now_sf = now_sf.permute(0, 3, 1, 2)
+
+        all_imgs = torch.cat([prev_imgs, now_imgs, next_imgs], dim=0)
+
+        
+        camera_intrinsic = data['cam_intrinsic']
+        #img_x, img_y = now_imgs.size(-2), now_imgs.size(-1)
+        img_x, img_y = now_imgs.size(-1), now_imgs.size(-2)
+        #print(now_imgs.shape)
+        scale_x = img_x / 1600
+        scale_y = img_y / 900
+        camera_intrinsic = scale_intrinsics(camera_intrinsic, scale_x, scale_y)
+        prev_cam_intrin = camera_intrinsic[:, 0:6, ...].view(-1, 3, 3)
+        now_cam_intrin = camera_intrinsic[:, 6:12, ...].view(-1, 3, 3)
+        next_cam_intrin = camera_intrinsic[:, 12:18, ...].view(-1, 3, 3)
+        
+        cam_pose = data['cam_pose']
+
+        # [N, 6, 4, 4] => [N*6, 4, 4]
+        prev_cam_pose = cam_pose[:, 0:6, ...].view(-1, 4, 4)
+        now_cam_pose = cam_pose[:, 6:12, ...].view(-1, 4, 4)
+        next_cam_pose = cam_pose[:, 12:18, ...].view(-1, 4, 4)
+
+
+        B, _, H, W = now_imgs.shape
+        
         with torch.no_grad():
-            model(return_loss=False, rescale=True, **data)
-
-        torch.cuda.synchronize()
-        elapsed = time.perf_counter() - start_time
-
-        if i >= num_warmup:
-            pure_inf_time += elapsed
-            if (i + 1) % args.log_interval == 0:
-                fps = (i + 1 - num_warmup) / pure_inf_time
-                print(f'Done image [{i + 1:<3}/ {args.samples}], '
-                      f'fps: {fps:.1f} img / s')
-
-        if (i + 1) == args.samples:
-            pure_inf_time += elapsed
-            fps = (i + 1 - num_warmup) / pure_inf_time
-            print(f'Overall fps: {fps:.1f} img / s')
-            break
-
+            #fused_motion = (now2next_sf_pred - now2prev_sf_pred) / 2
+            real_sf = convert_res_sf_to_sf(now_cam_intrin, next_cam_intrin,
+                                        now_cam_pose, next_cam_pose, now_depth, now_sf/10.0)
+            
 
 if __name__ == '__main__':
     main()

@@ -1,0 +1,1 @@
+python3 /home/zhangty/miniconda3/envs/yuewang/lib/python3.7/site-packages/nuscenes/eval/detection/evaluate.py 'results/detr3d_cam/resnet101_dcn.json' --output_dir='results/detr3d_cam/eval_over' --dataroot=data/nuscenes/ --overlap_path=/home/zhangty/trainval-val.json

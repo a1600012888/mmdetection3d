@@ -1,5 +1,3 @@
-
-
 # Set plugin = True
 plugin = True
 
@@ -19,8 +17,8 @@ plugin = True
 #    upsample_cfg=dict(type='InterpConv'),
 #    )
 model = dict(
-    type='PackNetSlim01',
-    version='B',
+    type='PackNetSlim03',
+    version='A',
 )
 
 
@@ -62,7 +60,7 @@ train_pipeline2 = [
 ]
 
 data = dict(
-    samples_per_gpu=6,
+    samples_per_gpu=8,
     workers_per_gpu=8,
     train=dict(
         type='NuscDepthDataset',
@@ -104,7 +102,7 @@ workflow = [('train', 1)]
 # use a default schedule.
 # optimizer
 # This schedule is mainly used by models on nuScenes dataset
-optimizer = dict(type='AdamW', lr=2e-3, weight_decay=0.001)
+optimizer = dict(type='AdamW', lr=1e-2, weight_decay=0.01)
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(

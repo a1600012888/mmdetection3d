@@ -4,11 +4,12 @@ from functools import partial
 import torch.nn.functional as F
 
 from mmdet.models import DETECTORS
-from .utils import get_depth_metrics, get_smooth_loss, remap_invdepth_color, get_smooth_L2_loss
+from .utils import get_depth_metrics, get_smooth_loss, \
+    remap_invdepth_color, get_smooth_L2_loss, get_L1_loss, inv_val
 from .packnet_layers import PackLayerConv3d, UnpackLayerConv3d, Conv2D, ResidualBlock, InvDepth
 
 @DETECTORS.register_module()
-class PackNetSlim02(nn.Module):
+class PackNetSlim09(nn.Module):
     """
     PackNet network with 3d convolutions (version 01, from the CVPR paper).
     Slimmer version, with fewer feature channels
@@ -27,6 +28,9 @@ class PackNetSlim02(nn.Module):
     def __init__(self, dropout=None, version=None, **kwargs):
         super().__init__()
         self.version = version
+
+        self.num_scales = 3
+
         # Input/output channels
         in_channels = 3
         out_channels = 1
@@ -106,6 +110,10 @@ class PackNetSlim02(nn.Module):
                 if m.bias is not None:
                     m.bias.data.zero_()
 
+    def adjust_num_scales(self):
+        if self.num_scales > 1:
+            self.num_scales = self.num_scales - 1
+
     def get_pred(self, x):
         x = self.pre_calc(x)
 
@@ -177,53 +185,34 @@ class PackNetSlim02(nn.Module):
         #print(disp1.shape)
         return [disp1, disp2, disp3, disp4]
 
-    #计算值的inverse
-    def inv_val(self, x):
-        y = []
-        for v in x:
-            y.append(1. / v.clamp(min=1e-6))   #避免除数为0
-        return y
-
-    def get_L1_loss(self, preds, label, mask):
-        loss = 0
-        num = torch.sum(mask)
-        num = num * 1.0
-        #print(label.shape)
-        B, _, H, W = label.shape
-        if isinstance(preds, list):     #train
-            for pred in preds:
-                #print(pred.shape)
-                up_pred = nn.functional.interpolate(pred, size=[H, W])
-                loss1 = torch.abs((label - up_pred)) * mask
-                loss1 = torch.sum(loss1) / num
-                loss += loss1
-        else:                           #test
-            loss = torch.abs((label - preds)) * mask
-            loss = torch.sum(loss) / num
-
-        return loss
+    #invert a map to an inverse map
 
     def forward(self, return_loss=True, rescale=False, **kwargs):
         
         if not return_loss:
             # in evalhook!
+            #print('num_scales', self.num_scales)
 
             x = kwargs['img']
             label = kwargs['depth_map']
 
             data = {'img':x, 'depth_map':label}
-            inv_depth_pred = self.get_pred(data['img'])
-            depth_pred = self.inv_val(inv_depth_pred)
+            inv_depth_preds = self.get_pred(data['img'])
+            depth_preds = inv_val(inv_depth_preds)
             label = data['depth_map'].unsqueeze(dim=1)
             mask = (label > 0)
+            inv_gt_depth = inv_val(label)
 
             #smoothness_loss = get_smooth_loss(depth_pred, data['img'])
-            smoothness_loss = get_smooth_loss(inv_depth_pred[0], data['img'], 1)
-            L1_loss = self.get_L1_loss(depth_pred[0], label, mask)
-            loss = L1_loss + smoothness_loss
+            #progressive_scale = ProgressiveScaling(0.2, 4)
+            #num_scales = progressive_scale()
+            num_scales = self.num_scales
+            smoothness_loss = get_smooth_loss(inv_depth_preds[:num_scales], data['img'], num_scales=num_scales)
+            L1_loss = get_L1_loss(inv_depth_preds[:num_scales], inv_gt_depth, num_scales=num_scales)
+            loss = 0.9 * L1_loss + 0.1 * smoothness_loss
             #print('L1_loss', depth_pred[0].shape, label.shape, mask.shape)
             with torch.no_grad():
-                metrics = get_depth_metrics(depth_pred[0], label, mask)
+                metrics = get_depth_metrics(depth_preds[0], label, mask)
                 # abs_diff, abs_rel, sq_rel, rmse, rmse_log
                 metrics = [m.item() for m in metrics]
 
@@ -237,23 +226,34 @@ class PackNetSlim02(nn.Module):
 
 
     def train_step(self, data, optimzier):
-        inv_depth_pred = self.get_pred(data['img'])
-        depth_pred = self.inv_val(inv_depth_pred)
+        #print('num_scales', self.num_scales)
+        inv_depth_preds = self.get_pred(data['img'])
+        depth_preds = inv_val(inv_depth_preds)
         label = data['depth_map'].unsqueeze(dim=1)
         mask = (label > 0)
+        inv_gt_depth = inv_val(label)
 
-        smoothness_loss = get_smooth_loss(inv_depth_pred[0], data['img'], 1)
-        L1_loss = self.get_L1_loss(depth_pred[0], label, mask)
-        loss = L1_loss + smoothness_loss
+        #progressive_scale = ProgressiveScaling(0.2, 4)
+        #num_scales = progressive_scale()
+        num_scales  =self.num_scales
+        smoothness_loss = get_smooth_loss(inv_depth_preds[:num_scales], data['img'], num_scales=num_scales)
+        L1_loss = get_L1_loss(inv_depth_preds[:num_scales], inv_gt_depth, num_scales=num_scales)
+        loss = 0.9 * L1_loss + 0.1 * smoothness_loss
+        B, _, H, W = label.shape
         #print('train_loss', depth_pred[0].shape)
         with torch.no_grad():
-                metrics = get_depth_metrics(depth_pred[0], label, mask)
+                metrics = get_depth_metrics(depth_preds[0], label, mask)
                 # abs_diff, abs_rel, sq_rel, rmse, rmse_log
                 metrics = [m.item() for m in metrics]
                 abs_diff, abs_rel, sq_rel, rmse, rmse_log = metrics
 
-                out_img1 = remap_invdepth_color(inv_depth_pred[0][0].clamp(max=1.0))
-
+                out_img1 = remap_invdepth_color(inv_depth_preds[0][0].clamp(max=1.0))
+                out_img2 = remap_invdepth_color(inv_depth_preds[1][0].clamp(max=1.0))
+                out_img2_up = remap_invdepth_color(nn.functional.interpolate(inv_depth_preds[1].clamp(max=1.0), size=[H, W])[0])
+                out_img3 = remap_invdepth_color(inv_depth_preds[2][0].clamp(max=1.0))
+                out_img3_up = remap_invdepth_color(nn.functional.interpolate(inv_depth_preds[2].clamp(max=1.0), size=[H, W])[0])
+                out_img4 = remap_invdepth_color(inv_depth_preds[3][0].clamp(max=1.0))
+                out_img4_up = remap_invdepth_color(nn.functional.interpolate(inv_depth_preds[3].clamp(max=1.0), size=[H, W])[0])
                 #print(out_img.shape)  (448, 768, 3)
         
         sparsity = torch.sum(mask) * 1.0 / torch.numel(mask)
@@ -262,7 +262,7 @@ class PackNetSlim02(nn.Module):
         mean = torch.tensor([123.675, 116.28, 103.53]).cuda().view(1, -1, 1, 1)
         img = data['img'] * std + mean
         img = img / 255.0
-        depth_at_gt = depth_pred[0] * mask
+        inv_depth_at_gt = inv_depth_preds[0] * mask
 
         log_vars = {'loss': loss.item(), 'L1_loss': L1_loss.item(), 
                     'sm_loss': smoothness_loss.item(), 'sparsity': sparsity.item(),
@@ -274,50 +274,14 @@ class PackNetSlim02(nn.Module):
         # 'pred', 'data', 'label', 'depth_at_gt' is used for visualization only!
         #print(img[0].shape, label[0].shape, depth_at_gt[0].shape)
         outputs = {'pred': out_img1.transpose(2, 0, 1), 'data': img[0],
-                'label': torch.clamp(1.0 / (label[0]+1e-4), 0, 1),
-                'depth_at_gt': torch.clamp(1.0 / (depth_at_gt[0]+1e-4), 0., 1),
-                'loss':loss, 'log_vars':log_vars, 'num_samples':depth_pred[0].size(0)}
+                'out_img2': out_img2.transpose(2, 0, 1), 'out_img2_up': out_img2_up.transpose(2, 0, 1),
+                'out_img3': out_img3.transpose(2, 0, 1), 'out_img3_up': out_img3_up.transpose(2, 0, 1),
+                'out_img4': out_img4.transpose(2, 0, 1), 'out_img4_up': out_img4_up.transpose(2, 0, 1),
+                'label': torch.clamp(inv_gt_depth[0], 0, 1),
+                'depth_at_gt': torch.clamp(inv_depth_at_gt[0], 0., 1),
+                'loss':loss, 'log_vars':log_vars, 'num_samples':depth_preds[0].size(0)}
 
         return outputs
 
     def val_step(self, data, optimizer):
-
-        inv_depth_pred = self.get_pred(data['img'])
-        depth_pred = self.inv_val(inv_depth_pred)
-        label = data['depth_map'].unsqueeze(dim=1)
-        mask = (label > 0)
-
-        #print(depth_pred.shape, label.shape, mask.shape, 'data shape')
-        #from IPython import embed
-        #embed()
-        loss = self.get_L1_loss(depth_pred[0], label, mask)
-        #print('L1_loss', depth_pred[0].shape, label.shape, mask.shape)
-        
-        with torch.no_grad():
-                metrics = get_depth_metrics(depth_pred[0], label, mask)
-                # abs_diff, abs_rel, sq_rel, rmse, rmse_log
-                metrics = [m.item() for m in metrics]
-                abs_diff, abs_rel, sq_rel, rmse, rmse_log = metrics
-        
-        sparsity = torch.sum(mask) * 1.0 / torch.numel(mask)
-
-        std = torch.tensor([58.395, 57.12, 57.375]).cuda().view(1, -1, 1, 1)
-        mean = torch.tensor([123.675, 116.28, 103.53]).cuda().view(1, -1, 1, 1)
-        img = data['img'] * std + mean
-        img = torch.clamp(img, min=0.0, max=255.0)
-        img = img / 255.0
-        depth_at_gt = depth_pred[0] * mask
-
-        log_vars = {'loss': loss.item(), 'sparsity': sparsity.item(),
-                    'abs_diff': abs_diff, 'abs_rel': abs_rel,
-                    'sq_rel': sq_rel, 'rmse': rmse,
-                    'rmse_log': rmse_log
-                     }
-        
-        # 'pred', 'data', 'label', 'depth_at_gt' is used for visualization only!
-        outputs = {'pred': torch.clamp(1.0 / (depth_pred[0]+1e-4), 0, 1), 'data': img,
-                'label': torch.clamp(1.0 / (label+1e-4), 0, 1),
-                'depth_at_gt': torch.clamp(1.0 / (depth_at_gt+1e-4), 0., 1),
-                'loss':loss, 'log_vars':log_vars, 'num_samples':depth_pred[0].size(0)}
-
-        return outputs
+        self.train_step(data, optimizer)

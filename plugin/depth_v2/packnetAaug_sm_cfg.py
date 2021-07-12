@@ -51,7 +51,7 @@ train_pipeline2 = [
         keep_ratio=False),
     #dict(type='LoadDepthImage', img_size=(480, 896), render_type='naive'), # results['seg_fields']
     dict(type='LoadDepthImage', img_size=(448, 768), render_type='naive'), # results['seg_fields']
-    dict(type='PhotoMetricDistortion'),
+    #dict(type='PhotoMetricDistortion'),
     dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
     dict(type='Normalize', **img_norm_cfg),
     #dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute'),
@@ -60,7 +60,7 @@ train_pipeline2 = [
 ]
 
 data = dict(
-    samples_per_gpu=4,
+    samples_per_gpu=8,
     workers_per_gpu=8,
     train=dict(
         type='NuscDepthDataset',
@@ -92,6 +92,7 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = None
 load_from = None
+#load_from = 'work_dirs/packnetA_cfg/epoch_28.pth'
 resume_from = None
 workflow = [('train', 1)]
 #workflow = [('train', 1), ('val', 1)]
@@ -102,7 +103,7 @@ workflow = [('train', 1)]
 # use a default schedule.
 # optimizer
 # This schedule is mainly used by models on nuScenes dataset
-optimizer = dict(type='AdamW', lr=2e-3, weight_decay=0.001)
+optimizer = dict(type='AdamW', lr=1e-2, weight_decay=0.001)
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(

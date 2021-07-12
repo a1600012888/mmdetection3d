@@ -15,17 +15,27 @@ class NuscDepthDataset(Dataset):
         self.depth_root = os.path.join(data_path, 'depth_data')
         #self.meta_path = os.path.join(data_path, 'meta.json')
         self.training = training
+        '''
         if training:
             self.meta_path = '/public/MARS/datasets/nuScenes-SF/depth_meta/meta_train.json'
+            self.data_infos = self.load_annotations()
+            self.meta_path = '/public/MARS/datasets/nuScenes-SF/depth_meta/meta_val.json'
+            val_data_infos = self.load_annotations()
+            self.data_infos += val_data_infos
         else:
             self.meta_path = '/public/MARS/datasets/nuScenes-SF/depth_meta/meta_val.json'
+            self.data_infos = self.load_annotations()
+        '''
         #from IPython import embed
         #embed()
+        
         if training:
-            #self.data_infos = self.load_annotations()[:-20000]
-            self.data_infos = self.load_annotations()[:-20000]
+            self.meta_path = '/public/MARS/datasets/nuScenes-SF/depth_meta/meta_train.json'
+            self.data_infos = self.load_annotations()[-1:]
         else:
-            self.data_infos = self.load_annotations()[-20000:]
+            self.meta_path = '/public/MARS/datasets/nuScenes-SF/depth_meta/meta_val.json'
+            self.data_infos = self.load_annotations()
+        
         if pipeline is not None:
             self.pipeline = Compose(pipeline)
         # not important
@@ -58,7 +68,7 @@ class NuscDepthDataset(Dataset):
 
     def __len__(self,):
         return len(self.data_infos)
-
+    
     def __getitem__(self, idx):
         data_info = self.get_data_info(idx)
 

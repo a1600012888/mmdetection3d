@@ -94,5 +94,3 @@ class ResizeDepthImage(object):
 
         results['depth_map'] = new_depth_map
         return results
-
-

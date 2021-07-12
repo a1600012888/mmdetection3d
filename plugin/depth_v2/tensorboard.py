@@ -57,10 +57,29 @@ class TensorboardLoggerHook2(LoggerHook):
                 self.writer.add_scalar(tag, runner.log_buffer.output[var],
                                        runner.iter)
         for var in runner.outputs:
-            if var in ['pred', 'data', 'label', 'depth_at_gt']:
+            if var in ['pred', 'data', 'label', 'depth_at_gt',
+                        'out_img2', 'out_img3', 'out_img4',
+                        'out_img2_up', 'out_img3_up', 'out_img4_up']:
                 tag = f'{var}/{runner.mode}'
                 img = runner.outputs[var]
-                self.writer.add_images(tag, img, runner.iter)
+                #print(var, img.shape)
+                self.writer.add_image(tag, img, runner.iter)
+        
+        #project the gt points into the prediction img
+            if var == 'pred':
+                pred_img = runner.outputs[var]
+                pred_img = torch.from_numpy(pred_img).cuda()
+            elif var == 'label':
+                label_img = runner.outputs[var]
+            elif var == 'data':
+                data_img = runner.outputs[var]
+        mask1 = (label_img == 1) #points without label
+        mask2 = (label_img < 1) #points with label
+        pred_img = pred_img * mask1 + label_img * mask2
+        data_img = data_img * mask1 + label_img * mask2
+        self.writer.add_image('pred+label', pred_img, runner.iter)
+        self.writer.add_image('data+label', data_img, runner.iter)
+        
         # add learning rate
         lrs = runner.current_lr()
         if isinstance(lrs, dict):
@@ -84,8 +103,9 @@ class TensorboardLoggerHook2(LoggerHook):
             if var in ['pred', 'data', 'label', 'depth_at_gt']:
                 tag = f'{var}/{runner.mode}'
                 img = runner.outputs[var]
-                self.writer.add_images(tag, img, runner.iter)
+                self.writer.add_image(tag, img, runner.iter)
 
     @master_only
     def after_run(self, runner):
         self.writer.close()
+

@@ -16,7 +16,8 @@ from mmdet3d import __version__
 from mmdet3d.datasets import build_dataset
 from mmdet3d.models import build_detector
 from mmdet3d.utils import collect_env, get_root_logger
-from mmdet.apis import set_random_seed, train_detector
+from mmdet.apis import set_random_seed
+from plugin.depth_v2 import train_detector
 
 from torch.utils.tensorboard import SummaryWriter
 

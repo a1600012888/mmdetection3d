@@ -1,5 +1,3 @@
-
-
 # Set plugin = True
 plugin = True
 
@@ -19,8 +17,8 @@ plugin = True
 #    upsample_cfg=dict(type='InterpConv'),
 #    )
 model = dict(
-    type='PackNetSlim01',
-    version='B',
+    type='PackNetSlim04',
+    version='A',
 )
 
 
@@ -40,29 +38,29 @@ train_pipeline = [
     #dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
     dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute', allow_negative_crop=True),
     #dict(type='RandomCrop', crop_size=(200, 200), crop_type='absolute', allow_negative_crop=True),
+    #dict(type='PhotoMetricDistortion')
     dict(type='ImageToTensor', keys=['img']),
     dict(type='Collect', keys=['img', 'depth_map']),
-
 ]
 train_pipeline2 = [
-    dict(type='LoadImageFromFile'), # filename = results['img_info']['filename']； results['img'] = img
+    dict(type='LoadImageFromFile', to_float32=True), # filename = results['img_info']['filename']； results['img'] = img
     dict(
         type='Resize',
         img_scale=(768, 448), # w, h; note after reading is (h=900, w=1600)
         multiscale_mode='value',
         keep_ratio=False),
-    dict(type='Normalize', **img_norm_cfg),
     #dict(type='LoadDepthImage', img_size=(480, 896), render_type='naive'), # results['seg_fields']
     dict(type='LoadDepthImage', img_size=(448, 768), render_type='naive'), # results['seg_fields']
-    #dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
+    dict(type='PhotoMetricDistortion'),
+    dict(type='RandomFlip', flip_ratio=0.5), # if depth -> mask, can resize, flip, rotate
+    dict(type='Normalize', **img_norm_cfg),
     #dict(type='RandomCrop', crop_size=(480, 896), crop_type='absolute'),
     dict(type='ImageToTensor', keys=['img']),
     dict(type='Collect', keys=['img', 'depth_map']),
-
 ]
 
 data = dict(
-    samples_per_gpu=6,
+    samples_per_gpu=8,
     workers_per_gpu=8,
     train=dict(
         type='NuscDepthDataset',
@@ -94,6 +92,7 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = None
 load_from = None
+#load_from = './work_dirs/packnetA_cfg/epoch_28.pth'
 resume_from = None
 workflow = [('train', 1)]
 #workflow = [('train', 1), ('val', 1)]

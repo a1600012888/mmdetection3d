@@ -4,11 +4,12 @@ from functools import partial
 import torch.nn.functional as F
 
 from mmdet.models import DETECTORS
-from .utils import get_depth_metrics, get_smooth_loss, remap_invdepth_color, get_smooth_L2_loss
+from .utils import get_depth_metrics, get_smooth_loss, \
+    remap_invdepth_color, get_smooth_L2_loss, get_L1_loss
 from .packnet_layers import PackLayerConv3d, UnpackLayerConv3d, Conv2D, ResidualBlock, InvDepth
 
 @DETECTORS.register_module()
-class PackNetSlim02(nn.Module):
+class PackNetSlim05(nn.Module):
     """
     PackNet network with 3d convolutions (version 01, from the CVPR paper).
     Slimmer version, with fewer feature channels
@@ -184,25 +185,6 @@ class PackNetSlim02(nn.Module):
             y.append(1. / v.clamp(min=1e-6))   #避免除数为0
         return y
 
-    def get_L1_loss(self, preds, label, mask):
-        loss = 0
-        num = torch.sum(mask)
-        num = num * 1.0
-        #print(label.shape)
-        B, _, H, W = label.shape
-        if isinstance(preds, list):     #train
-            for pred in preds:
-                #print(pred.shape)
-                up_pred = nn.functional.interpolate(pred, size=[H, W])
-                loss1 = torch.abs((label - up_pred)) * mask
-                loss1 = torch.sum(loss1) / num
-                loss += loss1
-        else:                           #test
-            loss = torch.abs((label - preds)) * mask
-            loss = torch.sum(loss) / num
-
-        return loss
-
     def forward(self, return_loss=True, rescale=False, **kwargs):
         
         if not return_loss:
@@ -218,9 +200,9 @@ class PackNetSlim02(nn.Module):
             mask = (label > 0)
 
             #smoothness_loss = get_smooth_loss(depth_pred, data['img'])
-            smoothness_loss = get_smooth_loss(inv_depth_pred[0], data['img'], 1)
-            L1_loss = self.get_L1_loss(depth_pred[0], label, mask)
-            loss = L1_loss + smoothness_loss
+            smoothness_loss = get_smooth_loss(inv_depth_pred, data['img'])
+            L1_loss = get_L1_loss(depth_pred[0], label, mask)
+            loss = L1_loss + 0.1 * smoothness_loss
             #print('L1_loss', depth_pred[0].shape, label.shape, mask.shape)
             with torch.no_grad():
                 metrics = get_depth_metrics(depth_pred[0], label, mask)
@@ -242,9 +224,10 @@ class PackNetSlim02(nn.Module):
         label = data['depth_map'].unsqueeze(dim=1)
         mask = (label > 0)
 
-        smoothness_loss = get_smooth_loss(inv_depth_pred[0], data['img'], 1)
-        L1_loss = self.get_L1_loss(depth_pred[0], label, mask)
-        loss = L1_loss + smoothness_loss
+        smoothness_loss = get_smooth_loss(inv_depth_pred, data['img'])
+        L1_loss = get_L1_loss(depth_pred[0], label, mask)
+        loss = L1_loss + 0.1 * smoothness_loss
+        B, _, H, W = label.shape
         #print('train_loss', depth_pred[0].shape)
         with torch.no_grad():
                 metrics = get_depth_metrics(depth_pred[0], label, mask)
@@ -253,7 +236,12 @@ class PackNetSlim02(nn.Module):
                 abs_diff, abs_rel, sq_rel, rmse, rmse_log = metrics
 
                 out_img1 = remap_invdepth_color(inv_depth_pred[0][0].clamp(max=1.0))
-
+                out_img2 = remap_invdepth_color(inv_depth_pred[1][0].clamp(max=1.0))
+                out_img2_up = remap_invdepth_color(nn.functional.interpolate(inv_depth_pred[1].clamp(max=1.0), size=[H, W])[0])
+                out_img3 = remap_invdepth_color(inv_depth_pred[2][0].clamp(max=1.0))
+                out_img3_up = remap_invdepth_color(nn.functional.interpolate(inv_depth_pred[2].clamp(max=1.0), size=[H, W])[0])
+                out_img4 = remap_invdepth_color(inv_depth_pred[3][0].clamp(max=1.0))
+                out_img4_up = remap_invdepth_color(nn.functional.interpolate(inv_depth_pred[3].clamp(max=1.0), size=[H, W])[0])
                 #print(out_img.shape)  (448, 768, 3)
         
         sparsity = torch.sum(mask) * 1.0 / torch.numel(mask)
@@ -274,6 +262,9 @@ class PackNetSlim02(nn.Module):
         # 'pred', 'data', 'label', 'depth_at_gt' is used for visualization only!
         #print(img[0].shape, label[0].shape, depth_at_gt[0].shape)
         outputs = {'pred': out_img1.transpose(2, 0, 1), 'data': img[0],
+                'out_img2': out_img2.transpose(2, 0, 1), 'out_img2_up': out_img2_up.transpose(2, 0, 1),
+                'out_img3': out_img3.transpose(2, 0, 1), 'out_img3_up': out_img3_up.transpose(2, 0, 1),
+                'out_img4': out_img4.transpose(2, 0, 1), 'out_img4_up': out_img4_up.transpose(2, 0, 1),
                 'label': torch.clamp(1.0 / (label[0]+1e-4), 0, 1),
                 'depth_at_gt': torch.clamp(1.0 / (depth_at_gt[0]+1e-4), 0., 1),
                 'loss':loss, 'log_vars':log_vars, 'num_samples':depth_pred[0].size(0)}
@@ -290,7 +281,7 @@ class PackNetSlim02(nn.Module):
         #print(depth_pred.shape, label.shape, mask.shape, 'data shape')
         #from IPython import embed
         #embed()
-        loss = self.get_L1_loss(depth_pred[0], label, mask)
+        loss = get_L1_loss(depth_pred[0], label, mask)
         #print('L1_loss', depth_pred[0].shape, label.shape, mask.shape)
         
         with torch.no_grad():

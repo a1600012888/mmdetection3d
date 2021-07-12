@@ -4,275 +4,8 @@ from functools import partial
 import torch.nn.functional as F
 
 from mmdet.models import DETECTORS
-from .utils import get_depth_metrics
-
-class Conv2D(nn.Module):
-    """
-    2D convolution with GroupNorm and ELU
-    Parameters
-    ----------
-    in_channels : int
-        Number of input channels
-    out_channels : int
-        Number of output channels
-    kernel_size : int
-        Kernel size
-    stride : int
-        Stride
-    """
-    def __init__(self, in_channels, out_channels, kernel_size, stride):
-        super().__init__()
-        self.kernel_size = kernel_size
-        self.conv_base = nn.Conv2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride)
-        self.pad = nn.ConstantPad2d([kernel_size // 2] * 4, value=0)
-        self.normalize = torch.nn.GroupNorm(16, out_channels)
-        self.activ = nn.ELU(inplace=True)
-
-    def forward(self, x):
-        """Runs the Conv2D layer."""
-        x = self.conv_base(self.pad(x))
-        return self.activ(self.normalize(x))
-
-
-class ResidualConv(nn.Module):
-    """2D Convolutional residual block with GroupNorm and ELU"""
-    def __init__(self, in_channels, out_channels, stride, dropout=None):
-        """
-        Initializes a ResidualConv object.
-        Parameters
-        ----------
-        in_channels : int
-            Number of input channels
-        out_channels : int
-            Number of output channels
-        stride : int
-            Stride
-        dropout : float
-            Dropout value
-        """
-        super().__init__()
-        self.conv1 = Conv2D(in_channels, out_channels, 3, stride)
-        self.conv2 = Conv2D(out_channels, out_channels, 3, 1)
-        self.conv3 = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride)
-        self.normalize = torch.nn.GroupNorm(16, out_channels)
-        self.activ = nn.ELU(inplace=True)
-
-        if dropout:
-            self.conv3 = nn.Sequential(self.conv3, nn.Dropout2d(dropout))
-
-    def forward(self, x):
-        """Runs the ResidualConv layer."""
-        x_out = self.conv1(x)
-        x_out = self.conv2(x_out)
-        shortcut = self.conv3(x)
-        return self.activ(self.normalize(x_out + shortcut))
-
-
-def ResidualBlock(in_channels, out_channels, num_blocks, stride, dropout=None):
-    """
-    Returns a ResidualBlock with various ResidualConv layers.
-    Parameters
-    ----------
-    in_channels : int
-        Number of input channels
-    out_channels : int
-        Number of output channels
-    num_blocks : int
-        Number of residual blocks
-    stride : int
-        Stride
-    dropout : float
-        Dropout value
-    """
-    layers = [ResidualConv(in_channels, out_channels, stride, dropout=dropout)]
-    for i in range(1, num_blocks):
-        layers.append(ResidualConv(out_channels, out_channels, 1, dropout=dropout))
-    return nn.Sequential(*layers)
-
-
-class InvDepth(nn.Module):
-    """Inverse depth layer"""
-    def __init__(self, in_channels, out_channels=1, min_depth=0.5):
-        """
-        Initializes an InvDepth object.
-        Parameters
-        ----------
-        in_channels : int
-            Number of input channels
-        out_channels : int
-            Number of output channels
-        min_depth : float
-            Minimum depth value to calculate
-        """
-        super().__init__()
-        self.min_depth = min_depth
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1)
-        self.pad = nn.ConstantPad2d([1] * 4, value=0)
-        self.activ = nn.Sigmoid()
-
-    def forward(self, x):
-        """Runs the InvDepth layer."""
-        x = self.conv1(self.pad(x))
-        return self.activ(x) / self.min_depth
-
-########################################################################################################################
-
-def packing(x, r=2):
-    """
-    Takes a [B,C,H,W] tensor and returns a [B,(r^2)C,H/r,W/r] tensor, by concatenating
-    neighbor spatial pixels as extra channels. It is the inverse of nn.PixelShuffle
-    (if you apply both sequentially you should get the same tensor)
-    Parameters
-    ----------
-    x : torch.Tensor [B,C,H,W]
-        Input tensor
-    r : int
-        Packing ratio
-    Returns
-    -------
-    out : torch.Tensor [B,(r^2)C,H/r,W/r]
-        Packed tensor
-    """
-    b, c, h, w = x.shape
-    out_channel = c * (r ** 2)
-    out_h, out_w = h // r, w // r
-    x = x.contiguous().view(b, c, out_h, r, out_w, r)
-    return x.permute(0, 1, 3, 5, 2, 4).contiguous().view(b, out_channel, out_h, out_w)
-
-########################################################################################################################
-
-class PackLayerConv2d(nn.Module):
-    """
-    Packing layer with 2d convolutions. Takes a [B,C,H,W] tensor, packs it
-    into [B,(r^2)C,H/r,W/r] and then convolves it to produce [B,C,H/r,W/r].
-    """
-    def __init__(self, in_channels, kernel_size, r=2):
-        """
-        Initializes a PackLayerConv2d object.
-        Parameters
-        ----------
-        in_channels : int
-            Number of input channels
-        kernel_size : int
-            Kernel size
-        r : int
-            Packing ratio
-        """
-        super().__init__()
-        self.conv = Conv2D(in_channels * (r ** 2), in_channels, kernel_size, 1)
-        self.pack = partial(packing, r=r)
-
-    def forward(self, x):
-        """Runs the PackLayerConv2d layer."""
-        x = self.pack(x)
-        x = self.conv(x)
-        return x
-
-
-class UnpackLayerConv2d(nn.Module):
-    """
-    Unpacking layer with 2d convolutions. Takes a [B,C,H,W] tensor, convolves it
-    to produce [B,(r^2)C,H,W] and then unpacks it to produce [B,C,rH,rW].
-    """
-    def __init__(self, in_channels, out_channels, kernel_size, r=2):
-        """
-        Initializes a UnpackLayerConv2d object.
-        Parameters
-        ----------
-        in_channels : int
-            Number of input channels
-        out_channels : int
-            Number of output channels
-        kernel_size : int
-            Kernel size
-        r : int
-            Packing ratio
-        """
-        super().__init__()
-        self.conv = Conv2D(in_channels, out_channels * (r ** 2), kernel_size, 1)
-        self.unpack = nn.PixelShuffle(r)
-
-    def forward(self, x):
-        """Runs the UnpackLayerConv2d layer."""
-        x = self.conv(x)
-        x = self.unpack(x)
-        return x
-
-########################################################################################################################
-
-class PackLayerConv3d(nn.Module):
-    """
-    Packing layer with 3d convolutions. Takes a [B,C,H,W] tensor, packs it
-    into [B,(r^2)C,H/r,W/r] and then convolves it to produce [B,C,H/r,W/r].
-    """
-    def __init__(self, in_channels, kernel_size, r=2, d=8):
-        """
-        Initializes a PackLayerConv3d object.
-        Parameters
-        ----------
-        in_channels : int
-            Number of input channels
-        kernel_size : int
-            Kernel size
-        r : int
-            Packing ratio
-        d : int
-            Number of 3D features
-        """
-        super().__init__()
-        self.conv = Conv2D(in_channels * (r ** 2) * d, in_channels, kernel_size, 1)
-        self.pack = partial(packing, r=r)
-        self.conv3d = nn.Conv3d(1, d, kernel_size=(3, 3, 3),
-                                stride=(1, 1, 1), padding=(1, 1, 1))
-
-    def forward(self, x):
-        """Runs the PackLayerConv3d layer."""
-        x = self.pack(x)
-        x = x.unsqueeze(1)
-        x = self.conv3d(x)
-        b, c, d, h, w = x.shape
-        x = x.view(b, c * d, h, w)
-        x = self.conv(x)
-        return x
-
-
-class UnpackLayerConv3d(nn.Module):
-    """
-    Unpacking layer with 3d convolutions. Takes a [B,C,H,W] tensor, convolves it
-    to produce [B,(r^2)C,H,W] and then unpacks it to produce [B,C,rH,rW].
-    """
-    def __init__(self, in_channels, out_channels, kernel_size, r=2, d=8):
-        """
-        Initializes a UnpackLayerConv3d object.
-        Parameters
-        ----------
-        in_channels : int
-            Number of input channels
-        out_channels : int
-            Number of output channels
-        kernel_size : int
-            Kernel size
-        r : int
-            Packing ratio
-        d : int
-            Number of 3D features
-        """
-        super().__init__()
-        self.conv = Conv2D(in_channels, out_channels * (r ** 2) // d, kernel_size, 1)
-        self.unpack = nn.PixelShuffle(r)
-        self.conv3d = nn.Conv3d(1, d, kernel_size=(3, 3, 3),
-                                stride=(1, 1, 1), padding=(1, 1, 1))
-
-    def forward(self, x):
-        """Runs the UnpackLayerConv3d layer."""
-        x = self.conv(x)
-        x = x.unsqueeze(1)
-        x = self.conv3d(x)
-        b, c, d, h, w = x.shape
-        x = x.view(b, c * d, h, w)
-        x = self.unpack(x)
-        return x
+from .utils import get_depth_metrics, get_smooth_loss, get_smooth_L2_loss
+from .packnet_layers import PackLayerConv3d, UnpackLayerConv3d, Conv2D, ResidualBlock, InvDepth
 
 
 @DETECTORS.register_module()
@@ -452,8 +185,10 @@ class PackNetSlim01(nn.Module):
             y.append(1. / v.clamp(min=1e-6))   #避免除数为0
         return y
 
-    def get_loss(self, preds, label, mask):
+    def get_L1_loss(self, preds, label, mask):
         loss = 0
+        num = torch.sum(mask)
+        num = num * 1.0
         #print(label.shape)
         B, _, H, W = label.shape
         if isinstance(preds, list):     #train
@@ -461,11 +196,12 @@ class PackNetSlim01(nn.Module):
                 #print(pred.shape)
                 up_pred = nn.functional.interpolate(pred, size=[H, W])
                 loss1 = torch.abs((label - up_pred)) * mask
-                loss1 = torch.sum(loss1) / torch.sum(mask)
+                loss1 = torch.sum(loss1) / num
                 loss += loss1
         else:                           #test
             loss = torch.abs((label - preds)) * mask
-            loss = torch.sum(loss) / torch.sum(mask)
+            loss = torch.sum(loss) / num
+
         return loss
 
     def forward(self, return_loss=True, rescale=False, **kwargs):
@@ -482,11 +218,9 @@ class PackNetSlim01(nn.Module):
             label = data['depth_map'].unsqueeze(dim=1)
             mask = (label > 0)
 
-            #print(depth_pred.shape, label.shape, mask.shape, 'data shape')
-            #loss = torch.abs((label - depth_pred)) * mask
-            #loss = torch.sum(loss) / torch.sum(mask)
-            loss = self.get_loss(depth_pred, label, mask)
-
+            L1_loss = self.get_L1_loss(depth_pred, label, mask)
+            loss = L1_loss
+            #print('L1_loss', depth_pred[0].shape, label.shape, mask.shape)
             with torch.no_grad():
                 metrics = get_depth_metrics(depth_pred[0], label, mask)
                 # abs_diff, abs_rel, sq_rel, rmse, rmse_log
@@ -507,15 +241,9 @@ class PackNetSlim01(nn.Module):
         label = data['depth_map'].unsqueeze(dim=1)
         mask = (label > 0)
 
-        #print(depth_pred.shape, label.shape, mask.shape, 'data shape')
-        #from IPython import embed
-        #embed()
-        #loss = torch.abs((label - depth_pred)) * mask
-        #loss = torch.sum(loss) / torch.sum(mask)
-        loss = self.get_loss(depth_pred, label, mask)
-
-        log_var = {}
-        
+        L1_loss = self.get_L1_loss(depth_pred, label, mask)
+        loss = L1_loss
+        #print('train_loss', depth_pred[0].shape)
         with torch.no_grad():
                 metrics = get_depth_metrics(depth_pred[0], label, mask)
                 # abs_diff, abs_rel, sq_rel, rmse, rmse_log
@@ -556,9 +284,8 @@ class PackNetSlim01(nn.Module):
         #embed()
         #loss = torch.abs((label - depth_pred)) * mask
         #loss = torch.sum(loss) / torch.sum(mask)
-        loss = self.get_loss(depth_pred[0], label, mask)
-
-        log_var = {}
+        loss = self.get_L1_loss(depth_pred[0], label, mask)
+        #print('L1_loss', depth_pred[0].shape, label.shape, mask.shape)
         
         with torch.no_grad():
                 metrics = get_depth_metrics(depth_pred[0], label, mask)
@@ -571,6 +298,7 @@ class PackNetSlim01(nn.Module):
         std = torch.tensor([58.395, 57.12, 57.375]).cuda().view(1, -1, 1, 1)
         mean = torch.tensor([123.675, 116.28, 103.53]).cuda().view(1, -1, 1, 1)
         img = data['img'] * std + mean
+        img = torch.clamp(img, min=0.0, max=255.0)
         img = img / 255.0
         depth_at_gt = depth_pred[0] * mask
 

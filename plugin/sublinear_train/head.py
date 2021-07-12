@@ -17,8 +17,9 @@ from mmdet3d.core.bbox.util import normalize_bbox, denormalize_bbox
 
 
 @HEADS.register_module()
-class DeformableDETR3DCamHead(DETRHead):
-    """Head of DeformDETR3DCam. 
+class DeformableDETR3DCamHeadV2(DETRHead):
+    """Head of DeformDETR3DCamV2.
+    No IoU Loss! 
 
     Args:
         with_box_refine (bool): Whether to refine the reference points
@@ -37,7 +38,6 @@ class DeformableDETR3DCamHead(DETRHead):
                  loss_bbox_scale=1.0,
                  num_cls_fcs=2,
                  code_wieghts=None,
-                 per_scene_noise=False,
                  **kwargs):
         self.with_box_refine = with_box_refine
         self.as_two_stage = as_two_stage
@@ -57,11 +57,10 @@ class DeformableDETR3DCamHead(DETRHead):
 
         self.loss_bbox_scale = loss_bbox_scale
         self.num_cls_fcs = num_cls_fcs - 1
-        super(DeformableDETR3DCamHead, self).__init__(
+        super(DeformableDETR3DCamHeadV2, self).__init__(
             *args, transformer=transformer, **kwargs)
         self.code_weights = nn.Parameter(torch.tensor(
             self.code_weights, requires_grad=False), requires_grad=False)
-        self.per_scene_noise = per_scene_noise
 
     def _init_layers(self):
         """Initialize classification branch and regression branch of head."""
@@ -128,12 +127,6 @@ class DeformableDETR3DCamHead(DETRHead):
         batch_size = mlvl_feats[0].size(0)
 
         query_embeds = self.query_embedding.weight
-
-        if self.per_scene_noise:
-            query_pos, query_embeds = torch.split(query_embeds, self.embed_dims , dim=1)
-            query_embeds = torch.cat(
-                (torch.randn_like(query_embeds), query_embeds), dim=1
-            )
         
         hs, init_reference, inter_references = self.transformer(
             mlvl_feats,
@@ -352,13 +345,8 @@ class DeformableDETR3DCamHead(DETRHead):
                 # bbox_preds[isnotnan, 8:], normalized_bbox_targets[isnotnan, 8:], bbox_weights[isnotnan, 8:], avg_factor=num_total_pos)
         # loss_bbox = loss_bbox + loss_bbox_vel * 0.2
 
-        loss_iou = self.loss_iou(
-            denormalize_bbox(bbox_preds, self.pc_range)[:, :7], bbox_targets[:, :7], bbox_weights[:, 0], avg_factor=num_total_pos)
-
-        loss_cls = torch.nan_to_num(loss_cls)
-        loss_bbox = torch.nan_to_num(loss_bbox)
-        loss_iou = torch.nan_to_num(loss_iou)
-        return loss_cls, loss_bbox * self.loss_bbox_scale, loss_iou
+        
+        return loss_cls, loss_bbox * self.loss_bbox_scale
     
     @force_fp32(apply_to=('preds_dicts'))
     def loss(self,
@@ -414,7 +402,7 @@ class DeformableDETR3DCamHead(DETRHead):
             gt_bboxes_ignore for _ in range(num_dec_layers)
         ]
 
-        losses_cls, losses_bbox, losses_iou = multi_apply(
+        losses_cls, losses_bbox = multi_apply(
             self.loss_single, all_cls_scores, all_bbox_preds,
             all_gt_bboxes_list, all_gt_labels_list, 
             all_gt_bboxes_ignore_list)
@@ -426,26 +414,24 @@ class DeformableDETR3DCamHead(DETRHead):
                 torch.zeros_like(gt_labels_list[i])
                 for i in range(len(all_gt_labels_list))
             ]
-            enc_loss_cls, enc_losses_bbox, enc_losses_iou = \
+            enc_loss_cls, enc_losses_bbox = \
                 self.loss_single(enc_cls_scores, enc_bbox_preds,
                                  gt_bboxes_list, binary_labels_list, gt_bboxes_ignore)
             loss_dict['enc_loss_cls'] = enc_loss_cls
             loss_dict['enc_loss_bbox'] = enc_losses_bbox
-            loss_dict['enc_loss_iou'] = enc_losses_iou
+            
 
         # loss from the last decoder layer
         loss_dict['loss_cls'] = losses_cls[-1]
         loss_dict['loss_bbox'] = losses_bbox[-1]
-        loss_dict['loss_iou'] = losses_iou[-1]
+        
 
         # loss from other decoder layers
         num_dec_layer = 0
-        for loss_cls_i, loss_bbox_i, loss_iou_i in zip(losses_cls[:-1],
-                                                       losses_bbox[:-1],
-                                                       losses_iou[:-1]):
+        for loss_cls_i, loss_bbox_i in zip(losses_cls[:-1],
+                                                       losses_bbox[:-1]):
             loss_dict[f'd{num_dec_layer}.loss_cls'] = loss_cls_i
             loss_dict[f'd{num_dec_layer}.loss_bbox'] = loss_bbox_i
-            loss_dict[f'd{num_dec_layer}.loss_iou'] = loss_iou_i
             num_dec_layer += 1
         return loss_dict
 
@@ -469,3 +455,30 @@ class DeformableDETR3DCamHead(DETRHead):
             labels = preds['labels']
             ret_list.append([bboxes, scores, labels])
         return ret_list
+
+    def get_iterative_bboxes(self, preds_dicts, img_metas, rescale=False):
+        """Generate bboxes from bbox head predictions.
+        Args:
+            preds_dicts (tuple[list[dict]]): Prediction results.
+            img_metas (list[dict]): Point cloud and image's meta info.
+        Returns:
+            list[dict]: Decoded bbox, scores and labels after nms.
+        """
+        # [nb_dec, bs, num_query, cls_out_channels]
+        preds_dicts_all = self.bbox_coder.decode_all(preds_dicts)
+
+        final_ret_list = []
+        for preds_dicts in preds_dicts_all:
+            num_samples = len(preds_dicts)
+            ret_list = []
+
+            for i in range(num_samples):
+                preds = preds_dicts[i]
+                bboxes = preds['bboxes']
+                bboxes[:, 2] = bboxes[:, 2] - bboxes[:, 5] * 0.5
+                bboxes = img_metas[i]['box_type_3d'](bboxes, 9)
+                scores = preds['scores']
+                labels = preds['labels']
+                ret_list.append([bboxes, scores, labels])
+            final_ret_list.append(ret_list)
+        return final_ret_list

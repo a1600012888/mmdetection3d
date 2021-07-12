@@ -211,6 +211,8 @@ class NuScenesDataset(Custom3DDataset):
         if self.modality['use_camera']:
             image_paths = []
             lidar2img_rts = []
+            intrinsics = []
+            extrinsics = []
             for cam_type, cam_info in info['cams'].items():
                 image_paths.append(cam_info['data_path'])
                 # obtain lidar to image transformation matrix
@@ -225,11 +227,15 @@ class NuScenesDataset(Custom3DDataset):
                 viewpad[:intrinsic.shape[0], :intrinsic.shape[1]] = intrinsic
                 lidar2img_rt = (viewpad @ lidar2cam_rt.T)
                 lidar2img_rts.append(lidar2img_rt)
+                intrinsics.append(viewpad)
+                extrinsics.append(lidar2cam_rt.T)
 
             input_dict.update(
                 dict(
                     img_filename=image_paths,
                     lidar2img=lidar2img_rts,
+                    intrinsic=intrinsics,
+                    extrinsic=extrinsics,
                 ))
 
         if not self.test_mode:

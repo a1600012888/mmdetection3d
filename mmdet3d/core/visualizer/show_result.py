@@ -247,9 +247,6 @@ def show_multi_modality_result(img,
                 proj_mat,
                 img_metas,
                 color=pred_bbox_color)
-        
-        print('show multi modality res')
-        mmcv.imwrite(show_img, osp.join(result_path, f'{filename}_project_img.png'))
         mmcv.imshow(show_img, win_name='project_bbox3d_img', wait_time=0)
 
     if img is not None:

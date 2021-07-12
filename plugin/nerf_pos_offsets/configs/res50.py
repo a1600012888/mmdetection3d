@@ -1,18 +1,16 @@
 _base_ = [
-    '../_base_/datasets/nus-3d.py',
-    # '../_base_/schedules/mmdet_schedule_1x.py',
-    # '../_base_/schedules/cyclic_20e.py',
-    '../_base_/default_runtime.py'
+    '../../_base_/datasets/nus-3d.py',
+    '../../_base_/default_runtime.py'
 ]
+plugin=True
+plugin_dir='plugin/nerf_pos_offsets/'
 
-# If point cloud range is changed, the models should also change their point
-# cloud range accordingly
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_size = [0.2, 0.2, 8]
 
 img_norm_cfg = dict(
     mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
-# For nuScenes we usually do 10-class detection
+
 class_names = [
     'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',
     'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
@@ -26,11 +24,13 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCam',
-    use_grid_mask=True,
+    type='Detr3DCamV2',
+    use_grid_mask=True, # use grid mask
+    sublinear=True, 
     img_backbone=dict(
         type='ResNet',
-        depth=101,
+        pretrained='open-mmlab://detectron2/resnet50_caffe',
+        depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
@@ -51,7 +51,7 @@ model = dict(
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
         type='DeformableDETR3DCamHead',
-        num_query=600,
+        num_query=300,
         num_classes=10,
         in_channels=256,
         sync_cls_avg_factor=True,
@@ -292,6 +292,8 @@ optimizer = dict(
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
+            #'offsets': dict(lr_mult=0.1),
+            #'reference_points': dict(lr_mult=0.1)
         }),
     weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
@@ -306,5 +308,5 @@ total_epochs = 12
 evaluation = dict(interval=2, pipeline=eval_pipeline)
 
 runner = dict(type='EpochBasedRunner', max_epochs=12)
-load_from='work_dirs/models/fcos3d.pth'
+
 find_unused_parameters = True

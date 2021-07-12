@@ -10,7 +10,9 @@ from .transforms_3d import (BackgroundPointsFilter, GlobalRotScaleTrans,
                             IndoorPatchPointSample, IndoorPointSample,
                             ObjectNoise, ObjectRangeFilter, ObjectSample,
                             PointShuffle, PointsRangeFilter, RandomFlip3D,
-                            VoxelBasedPointSampler, Pad3D, Normalize3D)
+                            VoxelBasedPointSampler, Pad3D, Normalize3D,
+                            RandomLRFlip, RandomFlip3DCam, Clip3D,
+                            RandomScaleImage3D)
 
 __all__ = [
     'ObjectSample', 'RandomFlip3D', 'ObjectNoise', 'GlobalRotScaleTrans',
@@ -21,5 +23,6 @@ __all__ = [
     'PointSegClassMapping', 'MultiScaleFlipAug3D', 'LoadPointsFromMultiSweeps',
     'BackgroundPointsFilter', 'VoxelBasedPointSampler',
     'IndoorPatchPointSample', 'LoadImageFromFileMono3D',
-    'Pad3D', 'Normalize3D'
+    'Pad3D', 'Normalize3D', 'RandomLRFlip', 'RandomFlip3DCam',
+    'Clip3D', 'RandomScaleImage3D'
 ]

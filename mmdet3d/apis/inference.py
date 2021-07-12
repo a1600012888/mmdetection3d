@@ -208,10 +208,10 @@ def show_result_meshlab(data,
     assert out_dir is not None, 'Expect out_dir, got none.'
 
     if 'pts_bbox' in result[0].keys():
-        pred_bboxes = result[0]['pts_bbox']['boxes_3d'].tensor.numpy()[:, :7]
+        pred_bboxes = result[0]['pts_bbox']['boxes_3d'].tensor.numpy()
         pred_scores = result[0]['pts_bbox']['scores_3d'].numpy()
     else:
-        pred_bboxes = result[0]['boxes_3d'].tensor.numpy()[:, :7]
+        pred_bboxes = result[0]['boxes_3d'].tensor.numpy()
         pred_scores = result[0]['scores_3d'].numpy()
 
     # filter out low score bboxes for visualization
@@ -221,7 +221,6 @@ def show_result_meshlab(data,
 
     # for now we convert points into depth mode
     box_mode = data['img_metas'][0][0]['box_mode_3d']
-    #print('box mode!', box_mode)
     if box_mode != Box3DMode.DEPTH:
         points = points[..., [1, 0, 2]]
         points[..., 0] *= -1
@@ -237,7 +236,6 @@ def show_result_meshlab(data,
         show=show,
         snapshot=snapshot)
 
-    
     if 'img' not in data.keys():
         return out_dir, file_name
 

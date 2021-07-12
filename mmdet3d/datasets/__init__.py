@@ -6,7 +6,6 @@ from .kitti_dataset import KittiDataset
 from .kitti_mono_dataset import KittiMonoDataset
 from .lyft_dataset import LyftDataset
 from .nuscenes_dataset import NuScenesDataset
-from .nuscenes_dataset_v2 import NuScenesDatasetV2
 from .nuscenes_mono_dataset import NuScenesMonoDataset
 from .pipelines import (BackgroundPointsFilter, GlobalRotScaleTrans,
                         IndoorPointSample, LoadAnnotations3D,
@@ -24,7 +23,7 @@ from .waymo_dataset import WaymoDataset
 __all__ = [
     'KittiDataset', 'KittiMonoDataset', 'GroupSampler',
     'DistributedGroupSampler', 'build_dataloader', 'RepeatFactorDataset',
-    'DATASETS', 'build_dataset', 'CocoDataset', 'NuScenesDataset', 'NuScenesDatasetV2',
+    'DATASETS', 'build_dataset', 'CocoDataset', 'NuScenesDataset',
     'NuScenesMonoDataset', 'LyftDataset', 'ObjectSample', 'RandomFlip3D',
     'ObjectNoise', 'GlobalRotScaleTrans', 'PointShuffle', 'ObjectRangeFilter',
     'PointsRangeFilter', 'Collect3D', 'LoadPointsFromFile',

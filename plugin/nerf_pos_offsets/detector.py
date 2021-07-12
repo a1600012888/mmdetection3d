@@ -2,12 +2,13 @@ import torch
 
 from mmdet3d.core import bbox3d2result, merge_aug_bboxes_3d
 from mmdet.models import DETECTORS
-from .mvx_two_stage import MVXTwoStageDetector
+from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from mmdet3d.models.utils.grid import GridMask
+from torch.utils.checkpoint import checkpoint
 
 
 @DETECTORS.register_module()
-class Detr3DCam(MVXTwoStageDetector):
+class Detr3DCamV2(MVXTwoStageDetector):
     """Base class of Multi-modality VoxelNet."""
 
     def __init__(self,
@@ -25,8 +26,9 @@ class Detr3DCam(MVXTwoStageDetector):
                  img_rpn_head=None,
                  train_cfg=None,
                  test_cfg=None,
-                 pretrained=None):
-        super(Detr3DCam,
+                 pretrained=None, 
+                 sublinear=False):
+        super(Detr3DCamV2,
               self).__init__(pts_voxel_layer, pts_voxel_encoder,
                              pts_middle_encoder, pts_fusion_layer,
                              img_backbone, pts_backbone, img_neck, pts_neck,
@@ -34,6 +36,7 @@ class Detr3DCam(MVXTwoStageDetector):
                              train_cfg, test_cfg, pretrained)
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         self.use_grid_mask = use_grid_mask
+        self.sublinear = sublinear
 
     def extract_pts_feat(self, pts, img_feats, img_metas):
         """Extract features of points."""
@@ -65,7 +68,11 @@ class Detr3DCam(MVXTwoStageDetector):
                 img = img.view(B * N, C, H, W)
             if self.use_grid_mask:
                 img = self.grid_mask(img)
-            img_feats = self.img_backbone(img)
+            if self.sublinear:
+                # enable sublinear on the backbone!
+                img_feats = checkpoint(self.img_backbone, img)
+            else:
+                img_feats = self.img_backbone(img)
         else:
             return None
         if self.with_img_neck:

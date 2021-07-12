@@ -302,4 +302,4 @@ evaluation = dict(interval=2, pipeline=eval_pipeline)
 
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 find_unused_parameters = True
-load_from='/home/zhangty/projects/yuewang/mmdetection3d/work_dirs/points/res50/epoch_8.pth'
+#load_from='/home/zhangty/projects/yuewang/mmdetection3d/work_dirs/points/res50/epoch_8.pth'

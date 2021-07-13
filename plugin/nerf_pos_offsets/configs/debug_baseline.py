@@ -24,11 +24,11 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamV2',
+    type='Detr3DCam',
     use_grid_mask=True, # use grid mask
-    sublinear=False,
     img_backbone=dict(
         type='ResNet',
+        with_cp=False, 
         pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,

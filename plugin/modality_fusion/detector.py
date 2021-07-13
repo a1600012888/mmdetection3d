@@ -4,11 +4,10 @@ from mmdet3d.core import bbox3d2result, merge_aug_bboxes_3d
 from mmdet.models import DETECTORS
 from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from mmdet3d.models.utils.grid import GridMask
-from torch.utils.checkpoint import checkpoint, checkpoint_sequential
 
 
 @DETECTORS.register_module()
-class Detr3DCamV2(MVXTwoStageDetector):
+class Detr3DCamModalityFusion(MVXTwoStageDetector):
     """Base class of Multi-modality VoxelNet."""
 
     def __init__(self,
@@ -26,9 +25,8 @@ class Detr3DCamV2(MVXTwoStageDetector):
                  img_rpn_head=None,
                  train_cfg=None,
                  test_cfg=None,
-                 pretrained=None,
-                 sublinear=False):
-        super(Detr3DCamV2,
+                 pretrained=None):
+        super(Detr3DCamModalityFusion,
               self).__init__(pts_voxel_layer, pts_voxel_encoder,
                              pts_middle_encoder, pts_fusion_layer,
                              img_backbone, pts_backbone, img_neck, pts_neck,
@@ -36,7 +34,6 @@ class Detr3DCamV2(MVXTwoStageDetector):
                              train_cfg, test_cfg, pretrained)
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         self.use_grid_mask = use_grid_mask
-        self.sublinear = sublinear
 
     def extract_pts_feat(self, pts, img_feats, img_metas):
         """Extract features of points."""
@@ -68,26 +65,11 @@ class Detr3DCamV2(MVXTwoStageDetector):
                 img = img.view(B * N, C, H, W)
             if self.use_grid_mask:
                 img = self.grid_mask(img)
-
-            img.requires_grad = True
             img_feats = self.img_backbone(img)
         else:
             return None
         if self.with_img_neck:
-            if self.sublinear:
-                for img_feat in img_feats:
-                    #img_feat.requires_grad=True
-                    print('before fpn', img_feat.requires_grad)
-                    pass
-                #print('neck before', img_feats[0].requires_grad)
-                img_feats = checkpoint(self.img_neck, img_feats)
-                
-                for img_feat in img_feats:
-                    #img_feat.requires_grad=True
-                    print('after fpn', img_feat.requires_grad)
-                #print('neck', img_feats[0].requires_grad)
-            else:
-                img_feats = self.img_neck(img_feats)
+            img_feats = self.img_neck(img_feats)
         img_feats_reshaped = []
         for img_feat in img_feats:
             BN, C, H, W = img_feat.size()
@@ -118,12 +100,7 @@ class Detr3DCamV2(MVXTwoStageDetector):
         Returns:
             dict: Losses of each branch.
         """
-        if self.sublinear:
-            #outs = checkpoint(self.pts_bbox_head, pts_feats, img_metas)
-            outs = self.pts_bbox_head(pts_feats, img_metas)
-            pass
-        else:
-            outs = self.pts_bbox_head(pts_feats, img_metas)
+        outs = self.pts_bbox_head(pts_feats, img_metas)
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
         losses = self.pts_bbox_head.loss(*loss_inputs)
         return losses
@@ -181,7 +158,7 @@ class Detr3DCamV2(MVXTwoStageDetector):
             for bboxes, scores, labels in bbox_list
         ]
         return bbox_results
-
+    
     def simple_test(self, points, img_metas, img=None, rescale=False):
         """Test function without augmentaiton."""
         img_feats, pts_feats = self.extract_feat(

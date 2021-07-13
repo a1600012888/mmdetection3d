@@ -3,7 +3,7 @@ _base_ = [
     '../../_base_/default_runtime.py'
 ]
 plugin=True
-plugin_dir='plugin/nerf_pos_offsets/'
+plugin_dir='plugin/modality_fusion/'
 
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_size = [0.2, 0.2, 8]
@@ -24,9 +24,8 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamV2',
+    type='Detr3DCam',
     use_grid_mask=True, # use grid mask
-    sublinear=False,
     img_backbone=dict(
         type='ResNet',
         pretrained='open-mmlab://detectron2/resnet50_caffe',

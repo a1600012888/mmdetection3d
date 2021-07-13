@@ -26,7 +26,7 @@ input_modality = dict(
 model = dict(
     type='Detr3DCamV2',
     use_grid_mask=True, # use grid mask
-    sublinear=False,
+    sublinear=True,
     img_backbone=dict(
         type='ResNet',
         pretrained='open-mmlab://detectron2/resnet50_caffe',
@@ -72,11 +72,12 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAtten',
+                            type='Detr3DCamCrossAttenOffsets',
                             pc_range=point_cloud_range,
                             use_dconv=False,
                             use_level_cam_embed=False,
-                            num_points=1,
+                            num_points=8,
+                            pos_embed_dims=16,
                             embed_dims=256)
                     ],
                     feedforward_channels=512,
@@ -292,7 +293,7 @@ optimizer = dict(
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
-            #'offsets': dict(lr_mult=0.1),
+            'offsets': dict(lr_mult=0.1),
             #'reference_points': dict(lr_mult=0.1)
         }),
     weight_decay=0.0001)

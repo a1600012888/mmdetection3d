@@ -148,10 +148,11 @@ class Detr3DCamCrossAttenOffsets(BaseModule):
         self.value_proj = nn.Linear(embed_dims,
                                     embed_dims)
         self.output_proj = nn.Linear(embed_dims, embed_dims)
-        self.level_embeds = nn.Parameter(
-            torch.Tensor(self.embed_dims, self.num_levels))
-        self.cam_embeds =  nn.Parameter(
-            torch.Tensor(self.embed_dims, self.num_cams))
+        if self.use_level_cam_embed:
+            self.level_embeds = nn.Parameter(
+                torch.Tensor(self.embed_dims, self.num_levels))
+            self.cam_embeds =  nn.Parameter(
+                torch.Tensor(self.embed_dims, self.num_cams))
 
         self.init_weight()
 
@@ -176,9 +177,9 @@ class Detr3DCamCrossAttenOffsets(BaseModule):
         #constant_init(self.offsets, val=0., bias=0.)
         xavier_init(self.value_proj, distribution='uniform', bias=0.)
         xavier_init(self.output_proj, distribution='uniform', bias=0.)
-        normal_(self.level_embeds)
-        normal_(self.cam_embeds)
-
+        if self.use_level_cam_embed:
+            normal_(self.level_embeds)
+            normal_(self.cam_embeds)
     
 
     def forward(self,
@@ -256,7 +257,7 @@ class Detr3DCamCrossAttenOffsets(BaseModule):
 
         # [B, num_query, num_heads*num_points*3]
         # shape [B, 1, num_query, 1, num_heads, num_points, 3]
-        offsets = self.offsets(query).view(bs, 1, num_query, 1, self.num_heads, self.num_points, 3) * 0.01  # or not?
+        offsets = self.offsets(query).view(bs, 1, num_query, 1, self.num_heads, self.num_points, 3) * 0.02 / self.num_points  # or not?
         # shape [B, num_cam, num_query, num_level, num_heads, num_points, 3]
         offsets = offsets.repeat(1, self.num_cams, 1, self.num_levels, 1, 1, 1)
 
@@ -266,12 +267,11 @@ class Detr3DCamCrossAttenOffsets(BaseModule):
         output = torch.nan_to_num(output)
         mask = torch.nan_to_num(mask)
 
-        # [embed_dims, num_level]
-        level_embeds = self.level_embeds.view(1, 1, self.num_heads, self.dim_per_head, 1, 1,  self.num_levels)
-        # [embed_dims, num_cams]
-        cam_embeds = self.cam_embeds.view(1, 1, self.num_heads, self.dim_per_head, self.num_cams, 1, 1)
-
         if self.use_level_cam_embed:
+            # [embed_dims, num_level]
+            level_embeds = self.level_embeds.view(1, 1, self.num_heads, self.dim_per_head, 1, 1,  self.num_levels)
+            # [embed_dims, num_cams]
+            cam_embeds = self.cam_embeds.view(1, 1, self.num_heads, self.dim_per_head, self.num_cams, 1, 1)
             output = output + level_embeds + cam_embeds
 
         # attention_weights = attention_weights.view(bs, 1, num_query, self.num_cams * self.num_levels)

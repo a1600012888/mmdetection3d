@@ -48,9 +48,9 @@ class DeformableDETR3DCamHead(DETRHead):
         else:
             self.code_size = 10
         if 'code_weights' in kwargs:
-            self.code_weights = kwargs['code_weights']
+            code_weights = kwargs['code_weights']
         else:
-            self.code_weights = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2]
+            code_weights = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2]
         
         self.bbox_coder = build_bbox_coder(bbox_coder)
         self.pc_range = self.bbox_coder.pc_range
@@ -59,8 +59,8 @@ class DeformableDETR3DCamHead(DETRHead):
         self.num_cls_fcs = num_cls_fcs - 1
         super(DeformableDETR3DCamHead, self).__init__(
             *args, transformer=transformer, **kwargs)
-        self.code_weights = nn.Parameter(torch.tensor(
-            self.code_weights, requires_grad=False), requires_grad=False)
+        self.register_buffer('code_weights', torch.tensor(
+            code_weights, requires_grad=False)) 
         self.per_scene_noise = per_scene_noise
 
     def _init_layers(self):

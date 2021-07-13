@@ -29,12 +29,13 @@ model = dict(
     sublinear=False,
     img_backbone=dict(
         type='ResNet',
+        with_cp=True,
         pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        norm_cfg=dict(type='BN2d', requires_grad=False),
+        norm_cfg=dict(type='BN2d'),
         norm_eval=True,
         style='caffe',
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
@@ -47,6 +48,7 @@ model = dict(
         add_extra_convs=True,
         extra_convs_on_inputs=False,  # use P5
         num_outs=4,
+        #norm_cfg=dict(type='GN', num_groups=16),
         norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
@@ -72,11 +74,12 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAtten',
+                            type='Detr3DCamCrossAttenOffsets',
                             pc_range=point_cloud_range,
                             use_dconv=False,
                             use_level_cam_embed=False,
-                            num_points=1,
+                            num_points=4,
+                            pos_embed_dims=16,
                             embed_dims=256)
                     ],
                     feedforward_channels=512,
@@ -292,7 +295,7 @@ optimizer = dict(
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
-            #'offsets': dict(lr_mult=0.1),
+            'offsets': dict(lr_mult=0.1),
             #'reference_points': dict(lr_mult=0.1)
         }),
     weight_decay=0.0001)

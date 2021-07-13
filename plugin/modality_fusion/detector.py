@@ -35,7 +35,7 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         self.grid_mask = GridMask(True, True, rotate=1, offset=False, ratio=0.5, mode=1, prob=0.7)
         self.use_grid_mask = use_grid_mask
 
-    def extract_pts_feat(self, pts, img_feats, img_metas):
+    def extract_pts_feat(self, pts):
         """Extract features of points."""
         if not self.with_pts_bbox:
             return None
@@ -79,7 +79,8 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
     def extract_feat(self, points, img, img_metas):
         """Extract features from images and points."""
         img_feats = self.extract_img_feat(img, img_metas)
-        return (img_feats, None)
+        pts_feats = self.extract_pts_feat(points)
+        return (img_feats, pts_feats)
 
     def forward_pts_train(self,
                           pts_feats,
@@ -142,7 +143,8 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         """
         img_feats, pts_feats = self.extract_feat(points, img=img, img_metas=img_metas)
         losses = dict()
-        losses_pts = self.forward_pts_train(img_feats, gt_bboxes_3d,
+        feats = torch.cat((img_feats, pts_feats), 1)
+        losses_pts = self.forward_pts_train(feats, gt_bboxes_3d,
                                             gt_labels_3d, img_metas,
                                             gt_bboxes_ignore)
         losses.update(losses_pts)

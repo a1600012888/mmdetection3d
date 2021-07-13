@@ -24,7 +24,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCam',
+    type='Detr3DCamModalityFusion',
     use_grid_mask=True, # use grid mask
     img_backbone=dict(
         type='ResNet',
@@ -48,11 +48,44 @@ model = dict(
         num_outs=4,
         norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
+    #refer https://github.com/open-mmlab/mmdetection3d/blob/master/configs/_base_/models/hv_pointpillars_fpn_nus.py
+    pts_voxel_layer=dict(
+        max_num_points=64,
+        point_cloud_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
+        voxel_size=voxel_size,
+        max_voxels=(30000, 40000)),
+    pts_voxel_encoder=dict(
+        type='HardVFE',
+        in_channels=4,
+        feat_channels=[64, 64],
+        with_distance=False,
+        voxel_size=voxel_size,
+        with_cluster_center=True,
+        with_voxel_center=True,
+        point_cloud_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
+        norm_cfg=dict(type='naiveSyncBN1d', eps=1e-3, momentum=0.01)),
+    pts_middle_encoder=dict(
+        type='PointPillarsScatter', in_channels=64, output_shape=[400, 400]),
+    pts_backbone=dict(
+        type='SECOND',
+        in_channels=64,
+        norm_cfg=dict(type='naiveSyncBN2d', eps=1e-3, momentum=0.01),
+        layer_nums=[3, 5, 5],
+        layer_strides=[2, 2, 2],
+        out_channels=[64, 128, 256]),
+    pts_neck=dict(
+        type='FPN',
+        norm_cfg=dict(type='naiveSyncBN2d', eps=1e-3, momentum=0.01),
+        act_cfg=dict(type='ReLU'),
+        in_channels=[64, 128, 256],
+        out_channels=256,
+        start_level=0,
+        num_outs=3),
     pts_bbox_head=dict(
         type='DeformableDETR3DCamHead',
         num_query=300,
         num_classes=10,
-        in_channels=256,
+        in_channels=512,
         sync_cls_avg_factor=True,
         with_box_refine=True,
         as_two_stage=False,
@@ -67,18 +100,18 @@ model = dict(
                     attn_cfgs=[
                         dict(
                             type='MultiheadAttention',
-                            embed_dims=256,
+                            embed_dims=512,
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAtten',
+                            type='Detr3DCamCrossAttenModalityFusion',
                             pc_range=point_cloud_range,
                             use_dconv=False,
                             use_level_cam_embed=False,
                             num_points=1,
-                            embed_dims=256)
+                            embed_dims=512)
                     ],
-                    feedforward_channels=512,
+                    feedforward_channels=1024,
                     ffn_dropout=0.1,
                     operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
                                      'ffn', 'norm')))),
@@ -91,7 +124,7 @@ model = dict(
             num_classes=10),
         positional_encoding=dict(
             type='SinePositionalEncoding',
-            num_feats=128,
+            num_feats=256,
             normalize=True,
             offset=-0.5),
         loss_cls=dict(

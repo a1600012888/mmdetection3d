@@ -24,12 +24,11 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamV2',
+    type='Detr3DCam',
     use_grid_mask=True, # use grid mask
-    sublinear=False,
     img_backbone=dict(
         type='ResNet',
-        pretrained='open-mmlab://detectron2/resnet50_caffe',
+        #pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -72,12 +71,11 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAttenOffsets',
+                            type='Detr3DCamCrossAtten',
                             pc_range=point_cloud_range,
                             use_dconv=False,
                             use_level_cam_embed=False,
-                            num_points=8,
-                            pos_embed_dims=16,
+                            num_points=1,
                             embed_dims=256)
                     ],
                     feedforward_channels=512,
@@ -289,14 +287,14 @@ data = dict(
 
 optimizer = dict(
     type='AdamW',
-    lr=1e-4,
+    lr=2e-4,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
-            'offsets': dict(lr_mult=0.1),
+            #'offsets': dict(lr_mult=0.1),
             #'reference_points': dict(lr_mult=0.1)
         }),
-    weight_decay=0.0001)
+    weight_decay=0.01)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
@@ -311,3 +309,4 @@ evaluation = dict(interval=2, pipeline=eval_pipeline)
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
+load_from='work_dirs/models/fcos3d.pth'

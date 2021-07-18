@@ -26,7 +26,7 @@ input_modality = dict(
 model = dict(
     type='Detr3DCamV2',
     use_grid_mask=True, # use grid mask
-    sublinear=False,
+    sublinear=True,
     img_backbone=dict(
         type='ResNet',
         with_cp=True,
@@ -35,7 +35,7 @@ model = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        norm_cfg=dict(type='BN2d'),
+        norm_cfg=dict(type='BN2d', requires_grad=False),
         norm_eval=True,
         style='caffe',
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
@@ -78,7 +78,7 @@ model = dict(
                             pc_range=point_cloud_range,
                             use_dconv=False,
                             use_level_cam_embed=False,
-                            num_points=4,
+                            num_points=1,
                             pos_embed_dims=16,
                             embed_dims=256)
                     ],

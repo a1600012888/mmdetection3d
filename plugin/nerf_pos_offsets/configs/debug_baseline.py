@@ -28,13 +28,14 @@ model = dict(
     use_grid_mask=True, # use grid mask
     img_backbone=dict(
         type='ResNet',
-        with_cp=False, 
+        with_cp=True, 
         pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
         norm_cfg=dict(type='BN2d', requires_grad=False),
+        #norm_cfg=dict(type='BN2d', requires_grad=True),
         norm_eval=True,
         style='caffe',
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
@@ -72,7 +73,7 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAtten',
+                            type='Detr3DCamCrossAttenOffsets',
                             pc_range=point_cloud_range,
                             use_dconv=False,
                             use_level_cam_embed=False,

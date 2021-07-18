@@ -54,8 +54,9 @@ class Detr3DCamCrossAttenModalityFusion(BaseModule):
                  use_dconv=False,
                  use_level_cam_embed=False,
                  norm_cfg=None,
-                 init_cfg=None):
-        super(Detr3DCamCrossAtten, self).__init__(init_cfg)
+                 init_cfg=None,
+                 **kwargs):
+        super(Detr3DCamCrossAttenModalityFusion, self).__init__(init_cfg)
         if embed_dims % num_heads != 0:
             raise ValueError(f'embed_dims must be divisible by num_heads, '
                              f'but got {embed_dims} and {num_heads}')
@@ -92,9 +93,24 @@ class Detr3DCamCrossAttenModalityFusion(BaseModule):
         self.use_level_cam_embed = use_level_cam_embed
         self.attention_weights = nn.Linear(embed_dims,
                                            num_cams*num_levels*num_points)
-        self.output_proj = nn.Linear(embed_dims, embed_dims)
+        self.pts_attention_weights = nn.Linear(embed_dims, 
+                                            num_levels*num_points)
+        self.img_output_proj = nn.Linear(embed_dims, embed_dims)
+        self.pts_output_proj = nn.Linear(embed_dims, embed_dims)
+        self.modality_fusion_layer = nn.Sequential(
+            nn.Linear(2*self.embed_dims, self.embed_dims),
+            nn.LayerNorm(self.embed_dims),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.embed_dims, self.embed_dims), 
+            nn.LayerNorm(self.embed_dims),
+            nn.ReLU(inplace=True),
+        )
+
+
         if self.use_level_cam_embed:
-            self.level_embeds = nn.Parameter(
+            self.img_level_embeds = nn.Parameter(
+                torch.Tensor(self.embed_dims, self.num_levels))
+            self.pts_level_embeds = nn.Parameter(
                 torch.Tensor(self.embed_dims, self.num_levels))
             self.cam_embeds = nn.Parameter(
                 torch.Tensor(self.embed_dims, self.num_cams))
@@ -178,31 +194,50 @@ class Detr3DCamCrossAttenModalityFusion(BaseModule):
 
         bs, num_query, _ = query.size()
 
+        # (B, 1, num_query, num_cams, num_points, num_levels)
         attention_weights = self.attention_weights(query).view(
             bs, 1, num_query, self.num_cams, self.num_points, self.num_levels)
-        
-        reference_points_3d, output, mask = feature_sampling(
-            value, reference_points, self.pc_range, kwargs['img_metas'])
-        output = torch.nan_to_num(output)
+        pts_attention_weights =  self.pts_attention_weights(query).view(
+            bs, 1, num_query, 1, self.num_points, self.num_levels)
+
+        # reference_points: (bs, num_query, 3)
+        # output (B, C, num_query, num_cam, num_points, len(lvl_feats))
+        reference_points_3d, img_output, mask = feature_sampling(
+            value['img_feats'], reference_points, self.pc_range, kwargs['img_metas'])
+        img_output = torch.nan_to_num(img_output)
         mask = torch.nan_to_num(mask)
 
         if self.use_level_cam_embed:
-            level_embeds = self.level_embeds.view(1, self.embed_dims, 1, 1, 1, self.num_levels)
+            img_level_embeds = self.img_level_embeds.view(1, self.embed_dims, 1, 1, 1, self.num_levels)
             cam_embeds = self.cam_embeds.view(1, self.embed_dims, 1, self.num_cams, 1, 1)
-            output = output + level_embeds + cam_embeds
-
-        # attention_weights = attention_weights.view(bs, 1, num_query, self.num_cams * self.num_levels)
-        # attention_weights = attention_weights.softmax(-1)
-        # attention_weights = attention_weights.view(bs, 1, num_query, self.num_cams, self.num_levels)
+            img_output = img_output + img_level_embeds + cam_embeds
 
         # TODO: use if else to switch between dynamic conv and weighted sum 
 
         attention_weights = self.weight_dropout(attention_weights.sigmoid()) * mask
-        output = output * attention_weights
-        output = output.sum(-1).sum(-1).sum(-1)
-        output = output.permute(2, 0, 1)
+        img_output = img_output * attention_weights
+        # output (B, emb_dims, num_query)
+        img_output = img_output.sum(-1).sum(-1).sum(-1)
+        # output (nun_query, B, emb_dims)
+        img_output = img_output.permute(2, 0, 1)
         
-        output = self.output_proj(output)
+        img_output = self.img_output_proj(img_output)
+
+        reference_points_3d, pts_output, pts_mask = feature_sampling_3D(
+            value['pts_feats'], reference_points, self.pc_range)
+        pts_output = torch.nan_to_num(pts_output)
+        pts_mask = torch.nan_to_num(pts_mask)
+        
+        pts_attention_weights = self.weight_dropout(pts_attention_weights.sigmoid()) * pts_mask
+        pts_output = pts_output * pts_attention_weights
+        pts_output = pts_output.sum(-1).sum(-1).sum(-1)
+        pts_output = pts_output.permute(2, 0, 1)
+
+        pts_output = self.pts_output_proj(pts_output)
+
+        output = torch.cat(img_output, pts_output)
+        output = self.modality_fusion_layer(output)
+
         # (num_query, bs, embed_dims)
         return self.dropout(output) + inp_residual + self.pos_encoder(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
 
@@ -213,7 +248,6 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
         lidar2img.append(img_meta['lidar2img'])
     lidar2img = np.asarray(lidar2img)
     lidar2img = reference_points.new_tensor(lidar2img) # (B, N, 4, 4)
-    reference_points = reference_points.clone()
     reference_points_3d = reference_points.clone()
     reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
     reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
@@ -222,11 +256,15 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points = torch.cat((reference_points, torch.ones_like(reference_points[..., :1])), -1)
     B, num_query = reference_points.size()[:2]
     num_cam = lidar2img.size(1)
+    # ref_point change to (B, num_cam, num_query, 4, 1)
     reference_points = reference_points.view(B, 1, num_query, 4).repeat(1, num_cam, 1, 1).unsqueeze(-1)
+    # lidar2img chaneg to (B, num_cam, num_query, 4, 4)
     lidar2img = lidar2img.view(B, num_cam, 1, 4, 4).repeat(1, 1, num_query, 1, 1)
+    # ref_point_cam change to (B, num_cam, num_query, 4)
     reference_points_cam = torch.matmul(lidar2img, reference_points).squeeze(-1)
     eps = 1e-5
     mask = (reference_points_cam[..., 2:3] > eps)
+    # ref_point_cam change to img coordinates
     reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(
         reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)
     reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
@@ -236,6 +274,7 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
                  & (reference_points_cam[..., 0:1] < 1.0) 
                  & (reference_points_cam[..., 1:2] > -1.0) 
                  & (reference_points_cam[..., 1:2] < 1.0))
+    # mask shape (B, 1, num_query, num_cam, 1, 1)
     mask = mask.view(B, num_cam, 1, num_query, 1, 1).permute(0, 2, 3, 1, 4, 5)
     mask = torch.nan_to_num(mask)
     sampled_feats = []
@@ -244,53 +283,42 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
         B, N, C, H, W = feat.size()
         feat_flip = torch.flip(feat, [-1])
         feat = feat.view(B*N, C, H, W)
+        # ref_point_cam shape change from (B, num_cam, num_query, 2) to (B*num_cam, num_query/10, 10, 2)
         reference_points_cam_lvl = reference_points_cam.view(B*N, int(num_query/10), 10, 2)
-        # offsets_lvl = offsets[:, lvl, :, :, :].reshape(B*N, num_query, num_points , 2)
-        # reference_points_cam_lvl = reference_points_cam_lvl + offsets_lvl
-        # (B* num_cam, num_query, 2), (B, N, C, H, W)
+        # sample_feat shape (B*N, C, num_query/10, 10)
         sampled_feat = F.grid_sample(feat, reference_points_cam_lvl)
+        # sampled_feat shape (B, C, num_query, N, num_points)
         sampled_feat = sampled_feat.view(B, N, C, num_query, num_points).permute(0, 2, 3, 1, 4)
         sampled_feats.append(sampled_feat)
     sampled_feats = torch.stack(sampled_feats, -1)
+    # sampled_feats (B, C, num_query, num_cam, num_points, len(lvl_feats))
     sampled_feats = sampled_feats.view(B, C, num_query, num_cam,  num_points, len(mlvl_feats))
+    # ref_point_3d (B, N, num_query, 3)  maks (B, N, num_query, 1)
     return reference_points_3d, sampled_feats, mask
 
 def feature_sampling_3D(mlvl_feats, reference_points, pc_range):
-    reference_points = reference_points.clone()
     reference_points_3d = reference_points.clone()
+    reference_points_rel = reference_points.clone()
     reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
     reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
     reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
-    # reference_points (B, num_queries, 4)
-    reference_points = torch.cat((reference_points, torch.ones_like(reference_points[..., :1])), -1)
+    # reference_points (B, num_queries, 3)
     B, num_query = reference_points.size()[:2]
-    reference_points = reference_points.view(B, 1, num_query, 4).repeat(1, num_cam, 1, 1).unsqueeze(-1)
     eps = 1e-5
-    mask = (reference_points_cam[..., 2:3] > eps)
-    reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(
-        reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)
-    reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
-    reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
-    reference_points_cam = (reference_points_cam - 0.5) * 2
-    mask = (mask & (reference_points_cam[..., 0:1] > -1.0) 
-                 & (reference_points_cam[..., 0:1] < 1.0) 
-                 & (reference_points_cam[..., 1:2] > -1.0) 
-                 & (reference_points_cam[..., 1:2] < 1.0))
-    mask = mask.view(B, num_cam, 1, num_query, 1, 1).permute(0, 2, 3, 1, 4, 5)
+    reference_points_rel[..., 0] = reference_points[..., 0] / pc_range[3]
+    reference_points_rel[..., 1] = reference_points[..., 1] / pc_range[4]
+    mask = (reference_points_rel > eps)
+    mask = mask.view(B, 1, 1, num_query, 1, 1).permute(0, 2, 3, 1, 4, 5)
     mask = torch.nan_to_num(mask)
     sampled_feats = []
     num_points = 1
     for lvl, feat in enumerate(mlvl_feats):
         B, N, C, H, W = feat.size()
-        feat_flip = torch.flip(feat, [-1])
         feat = feat.view(B*N, C, H, W)
-        reference_points_cam_lvl = reference_points_cam.view(B*N, int(num_query/10), 10, 2)
-        # offsets_lvl = offsets[:, lvl, :, :, :].reshape(B*N, num_query, num_points , 2)
-        # reference_points_cam_lvl = reference_points_cam_lvl + offsets_lvl
-        # (B* num_cam, num_query, 2), (B, N, C, H, W)
-        sampled_feat = F.grid_sample(feat, reference_points_cam_lvl)
+        reference_points_rel_lvl = reference_points_rel.view(B*N, int(num_query/10), 10, 2)
+        sampled_feat = F.grid_sample(feat, reference_points_rel_lvl)
         sampled_feat = sampled_feat.view(B, N, C, num_query, num_points).permute(0, 2, 3, 1, 4)
         sampled_feats.append(sampled_feat)
     sampled_feats = torch.stack(sampled_feats, -1)
-    sampled_feats = sampled_feats.view(B, C, num_query, num_cam,  num_points, len(mlvl_feats))
+    sampled_feats = sampled_feats.view(B, C, num_query, 1,  num_points, len(mlvl_feats))
     return reference_points_3d, sampled_feats, mask

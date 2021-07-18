@@ -18,6 +18,11 @@ from mmdet3d.models import build_detector
 from mmdet3d.utils import collect_env, get_root_logger
 from mmdet.apis import set_random_seed, train_detector
 
+'''
+import ptvsd
+ptvsd.enable_attach(address = ('10.200.3.63', 5678))
+ptvsd.wait_for_attach()
+'''
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a detector')

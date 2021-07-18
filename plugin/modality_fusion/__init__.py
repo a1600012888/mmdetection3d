@@ -1,3 +1,4 @@
 
 from .detector import Detr3DCamModalityFusion
-from .transformer import Detr3DCamTransformerDecoderModalityFusion
+from .transformer import Detr3DCamTransformerDecoderModalityFusion, Detr3DCamTransformerModalityFusion
+from .attention import Detr3DCamCrossAttenModalityFusion

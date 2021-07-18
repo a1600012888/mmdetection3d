@@ -40,11 +40,19 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         if not self.with_pts_bbox:
             return None
         voxels, num_points, coors = self.voxelize(pts)
-
+        '''
+        print('voxels', voxels.size())
+        print('num_points', num_points.size())
+        print('coors', coors.size())
+        '''
         voxel_features = self.pts_voxel_encoder(voxels, num_points, coors)
         batch_size = coors[-1, 0] + 1
-        x = self.pts_middle_encoder(voxel_features, coors, batch_size)
+        #print('voxel_feat', voxel_features.size())
+        #print(batch_size)
+        x = self.pts_middle_encoder(voxel_features, coors, batch_size.item())
+        #print('after_middle', x.size())
         x = self.pts_backbone(x)
+        #print('after_backbone', x.size())
         if self.with_pts_neck:
             x = self.pts_neck(x)
         return x
@@ -79,11 +87,22 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
     def extract_feat(self, points, img, img_metas):
         """Extract features from images and points."""
         img_feats = self.extract_img_feat(img, img_metas)
+        
+        #print('input img', img.size())
+        #print('img_feats', len(img_feats))
+        #for i in range(4):
+        #    print(i, img_feats[i].size())
+        
         pts_feats = self.extract_pts_feat(points)
+        #print('pts_feats', len(pts_feats))
+        #for i in range(4):
+        #    print(i, pts_feats[i].size())
+        #print
         return (img_feats, pts_feats)
 
-    def forward_pts_train(self,
+    def forward_mdfs_train(self,
                           pts_feats,
+                          img_feats,
                           gt_bboxes_3d,
                           gt_labels_3d,
                           img_metas,
@@ -91,6 +110,7 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         """Forward function for point cloud branch.
         Args:
             pts_feats (list[torch.Tensor]): Features of point cloud branch
+            img_feats (list[torch.Tensor]): Features of image
             gt_bboxes_3d (list[:obj:`BaseInstance3DBoxes`]): Ground truth
                 boxes for each sample.
             gt_labels_3d (list[torch.Tensor]): Ground truth labels for
@@ -101,7 +121,7 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         Returns:
             dict: Losses of each branch.
         """
-        outs = self.pts_bbox_head(pts_feats, img_metas)
+        outs = self.pts_bbox_head(pts_feats, img_feats, img_metas)
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
         losses = self.pts_bbox_head.loss(*loss_inputs)
         return losses
@@ -143,8 +163,10 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         """
         img_feats, pts_feats = self.extract_feat(points, img=img, img_metas=img_metas)
         losses = dict()
-        feats = torch.cat((img_feats, pts_feats), 1)
-        losses_pts = self.forward_pts_train(feats, gt_bboxes_3d,
+        pts_feats = [feat.unsqueeze(dim=1) for feat in pts_feats]
+        #print(type(pts_feats), type(img_feats))
+        #print(type(feats))
+        losses_pts = self.forward_mdfs_train(pts_feats, img_feats, gt_bboxes_3d,
                                             gt_labels_3d, img_metas,
                                             gt_bboxes_ignore)
         losses.update(losses_pts)

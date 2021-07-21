@@ -2,4 +2,6 @@
 from .detector import Detr3DCamModalityFusion
 from .transformer import Detr3DCamTransformerDecoderModalityFusion, Detr3DCamTransformerModalityFusion
 from .attention import Detr3DCamCrossAttenModalityFusion
+from .attention import MultiheadAttentionModalityFusion
 from .detr_mdfs_head import DeformableDETR3DCamHeadModalityFusion
+from .._base_.datasets.nuscenes import  NuScenesDataset2

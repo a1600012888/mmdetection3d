@@ -85,3 +85,34 @@ model = dict(
         min_bbox_size=0,
         nms_pre=100,
         max_num=50))
+g_iou_thr=0.4,
+                    min_pos_iou=0.4,
+                    ignore_iof_thr=-1),
+                dict(  # cyclist
+                    type='MaxIoUAssigner',
+                    iou_calculator=dict(type='BboxOverlapsNearest3D'),
+                    pos_iou_thr=0.5,
+                    neg_iou_thr=0.3,
+                    min_pos_iou=0.3,
+                    ignore_iof_thr=-1),
+                dict(  # pedestrian
+                    type='MaxIoUAssigner',
+                    iou_calculator=dict(type='BboxOverlapsNearest3D'),
+                    pos_iou_thr=0.5,
+                    neg_iou_thr=0.3,
+                    min_pos_iou=0.3,
+                    ignore_iof_thr=-1),
+            ],
+            allowed_border=0,
+            code_weight=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            pos_weight=-1,
+            debug=False)),
+    test_cfg=dict(
+        pts=dict(
+            use_rotate_nms=True,
+            nms_across_levels=False,
+            nms_pre=4096,
+            nms_thr=0.25,
+            score_thr=0.1,
+            min_bbox_size=0,
+            max_num=500)))

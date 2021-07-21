@@ -161,11 +161,13 @@ class Detr3DCamTransformerModalityFusion(BaseModule):
         print(value.size())
         '''
         query_pos = query_pos.permute(1, 0, 2)
-        print(query.size(), query_pos.size())
+        #print(query.size(), query_pos.size())
         inter_states, inter_references = self.decoder(
             query=query,
             key=None,
-            value={'pts_feats': mlvl_pts_feats, 'img_feats': mlvl_img_feats},
+            #value={'pts_feats': mlvl_pts_feats, 'img_feats': mlvl_img_feats},
+            pts_feats=mlvl_pts_feats,
+            img_feats=mlvl_img_feats, 
             query_pos=query_pos,
             reference_points=reference_points,
             reg_branches=reg_branches,

@@ -115,3 +115,6 @@ data = dict(
 # interval to be 24. Please change the interval accordingly if you do not
 # use a default schedule.
 evaluation = dict(interval=24)
+    box_type_3d='LiDAR'))
+
+evaluation = dict(interval=1)

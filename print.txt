@@ -1,0 +1,1 @@
+torch.cuda.FloatTensor torch.cuda.FloatTensor torch.cuda.FloatTensorcuda:0 cuda:0 cuda:0

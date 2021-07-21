@@ -45,6 +45,7 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         print('num_points', num_points.size())
         print('coors', coors.size())
         '''
+        #print(voxels.size(), num_points.size(), coors.size())
         voxel_features = self.pts_voxel_encoder(voxels, num_points, coors)
         batch_size = coors[-1, 0] + 1
         #print('voxel_feat', voxel_features.size())
@@ -161,6 +162,7 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         Returns:
             dict: Losses of different branches.
         """
+        
         img_feats, pts_feats = self.extract_feat(points, img=img, img_metas=img_metas)
         losses = dict()
         pts_feats = [feat.unsqueeze(dim=1) for feat in pts_feats]
@@ -172,9 +174,9 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         losses.update(losses_pts)
         return losses
 
-    def simple_test_pts(self, x, img_metas, rescale=False):
+    def simple_test_mdfs(self, pts_feats, img_feats, img_metas, rescale=False):
         """Test function of point cloud branch."""
-        outs = self.pts_bbox_head(x, img_metas)
+        outs = self.pts_bbox_head(pts_feats, img_feats, img_metas)
         bbox_list = self.pts_bbox_head.get_bboxes(
             outs, img_metas, rescale=rescale)
         bbox_results = [
@@ -188,9 +190,11 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         img_feats, pts_feats = self.extract_feat(
             points, img=img, img_metas=img_metas)
 
+        pts_feats = [feat.unsqueeze(dim=1) for feat in pts_feats]
+
         bbox_list = [dict() for i in range(len(img_metas))]
-        bbox_pts = self.simple_test_pts(
-            img_feats, img_metas, rescale=rescale)
+        bbox_pts = self.simple_test_mdfs(
+            pts_feats, img_feats, img_metas, rescale=rescale)
         for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
             result_dict['pts_bbox'] = pts_bbox
         return bbox_list

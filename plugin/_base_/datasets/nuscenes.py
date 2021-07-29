@@ -178,7 +178,7 @@ class NuScenesDataset2(Custom3DDataset):
         data_infos = data_infos[::self.load_interval]
 
         #print(len(data_infos))
-        #data_infos = data_infos[:1]
+        data_infos = data_infos
         self.metadata = data['metadata']
         self.version = self.metadata['version']
         return data_infos

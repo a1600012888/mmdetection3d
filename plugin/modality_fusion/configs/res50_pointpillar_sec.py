@@ -28,7 +28,7 @@ model = dict(
     use_grid_mask=True, # use grid mask
     img_backbone=dict(
         type='ResNet',
-        pretrained='open-mmlab://detectron2/resnet50_caffe',
+        #pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -55,15 +55,14 @@ model = dict(
         voxel_size=voxel_size,
         max_voxels=(30000, 40000)),
     pts_voxel_encoder=dict(
-        type='HardVFE',
+        type='PillarFeatureNet',
         in_channels=5,
-        feat_channels=[64, 64],
+        feat_channels=[64],
         with_distance=False,
-        voxel_size=voxel_size,
-        with_cluster_center=True,
-        with_voxel_center=True,
-        point_cloud_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
-        norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01)),
+        voxel_size=(0.2, 0.2, 8),
+        norm_cfg=dict(type='naiveSyncBN1d', eps=1e-3, momentum=0.01),
+        legacy=False),
+
     pts_middle_encoder=dict(
         type='PointPillarsScatter', in_channels=64, output_shape=[512, 512]),
     pts_backbone=dict(
@@ -344,3 +343,16 @@ evaluation = dict(interval=2, pipeline=eval_pipeline)
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
+
+'''
+    pts_voxel_encoder=dict(
+        type='HardVFE',
+        in_channels=5,
+        feat_channels=[64, 64],
+        with_distance=False,
+        voxel_size=voxel_size,
+        with_cluster_center=True,
+        with_voxel_center=True,
+        point_cloud_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
+        norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01)),
+'''True

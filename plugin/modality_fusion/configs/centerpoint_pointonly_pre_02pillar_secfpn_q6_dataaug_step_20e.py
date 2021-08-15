@@ -53,16 +53,16 @@ model = dict(
         layer_strides=[2, 2, 2],
         out_channels=[64, 128, 256]),
     pts_neck=dict(
-        type='FPN',
-        norm_cfg=dict(type='naiveSyncBN2d', eps=1e-3, momentum=0.01),
-        act_cfg=dict(type='ReLU'),
+        type='SECONDFPNv2',
         in_channels=[64, 128, 256],
-        out_channels=256,
-        start_level=1,
-        num_outs=4),
+        out_channels=[256, 256, 256],
+        upsample_strides=[0.5, 1, 2],
+        norm_cfg=dict(type='BN', eps=1e-3, momentum=0.01),
+        upsample_cfg=dict(type='deconv', bias=False),
+        use_conv_for_no_stride=True),
     pts_bbox_head=dict(
         type='DeformableDETR3DCamHeadPoint',
-        num_query=300,
+        num_query=600,
         num_classes=10,
         in_channels=256,
         sync_cls_avg_factor=True,
@@ -83,12 +83,13 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAttenPointOffset',
+                            type='Detr3DCamCrossAttenPoint',
                             pc_range=point_cloud_range,
                             use_dconv=True,
                             use_level_cam_embed=True,
-                            num_points=1,
-                            embed_dims=256)
+                            num_points=8,
+                            embed_dims=256,
+                            num_levels=3)
                     ],
                     feedforward_channels=512,
                     ffn_dropout=0.1,
@@ -322,15 +323,15 @@ optimizer = dict(
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=10, norm_type=2))
 
-'''
+
 lr_config = dict(
     policy='step',
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[10, 16, 19])
-'''
+    step=[16, 18])
 
+'''
 lr_config = dict(
     policy='cyclic',
     target_ratio=(10, 1e-4),
@@ -343,12 +344,12 @@ momentum_config = dict(
     cyclic_times=1,
     step_ratio_up=0.4,
 )
-
+'''
 total_epochs = 20
 evaluation = dict(interval=2, pipeline=eval_pipeline)
 
 runner = dict(type='EpochBasedRunner', max_epochs=20)
 
-find_unused_parameters = False
+find_unused_parameters = True
 
 load_from='/public/MARS/models/surrdet/points_model/centerpoint_02pillar_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201004_170716-a134a233.pth'

@@ -83,7 +83,7 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAttenPointOffset',
+                            type='Detr3DCamCrossAttenPoint',
                             pc_range=point_cloud_range,
                             use_dconv=True,
                             use_level_cam_embed=True,
@@ -284,7 +284,7 @@ eval_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=12,
+    samples_per_gpu=8,
     workers_per_gpu=4,
     train=dict(
         type='CBGSDataset',
@@ -307,15 +307,12 @@ data = dict(
 
 optimizer = dict(
     type='AdamW',
-    lr=3e-4,
+    lr=2e-4,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
             #'offsets': dict(lr_mult=0.1),
             #'reference_points': dict(lr_mult=0.1)
-            'pts_voxel_encoder': dict(lr_mult=0.1),
-            'pts_middle_encoder': dict(lr_mult=0.1),
-            'pts_backbone': dict(lr_mult=0.1),
         }),
     weight_decay=0.01)
 
@@ -351,4 +348,4 @@ runner = dict(type='EpochBasedRunner', max_epochs=20)
 
 find_unused_parameters = False
 
-load_from='/public/MARS/models/surrdet/points_model/centerpoint_02pillar_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201004_170716-a134a233.pth'
+#load_from='/public/MARS/models/surrdet/points_model/centerpoint_02pillar_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201004_170716-a134a233.pth'

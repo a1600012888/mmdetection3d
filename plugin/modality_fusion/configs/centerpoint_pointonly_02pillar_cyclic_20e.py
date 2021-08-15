@@ -83,7 +83,7 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAttenPointOffset',
+                            type='Detr3DCamCrossAttenPoint',
                             pc_range=point_cloud_range,
                             use_dconv=True,
                             use_level_cam_embed=True,
@@ -202,7 +202,7 @@ train_pipeline = [
         pad_empty_sweeps=True,
         remove_close=True),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
-    dict(type='ObjectSample', db_sampler=db_sampler),
+    #dict(type='ObjectSample', db_sampler=db_sampler),
     dict(
         type='GlobalRotScaleTrans',
         rot_range=[-0.3925, 0.3925],
@@ -304,6 +304,12 @@ data = dict(
     val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality),
     test=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality))
 
+log_config = dict(
+    interval=50,
+    hooks=[
+        dict(type='TextLoggerHook'),
+        dict(type='TensorboardLoggerHookv2')
+    ])
 
 optimizer = dict(
     type='AdamW',
@@ -313,9 +319,7 @@ optimizer = dict(
             'img_backbone': dict(lr_mult=0.1),
             #'offsets': dict(lr_mult=0.1),
             #'reference_points': dict(lr_mult=0.1)
-            'pts_voxel_encoder': dict(lr_mult=0.1),
-            'pts_middle_encoder': dict(lr_mult=0.1),
-            'pts_backbone': dict(lr_mult=0.1),
+            
         }),
     weight_decay=0.01)
 
@@ -351,4 +355,4 @@ runner = dict(type='EpochBasedRunner', max_epochs=20)
 
 find_unused_parameters = False
 
-load_from='/public/MARS/models/surrdet/points_model/centerpoint_02pillar_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201004_170716-a134a233.pth'
+#load_from='/public/MARS/models/surrdet/points_model/centerpoint_02pillar_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201004_170716-a134a233.pth'

@@ -6,7 +6,7 @@ plugin=True
 plugin_dir='plugin/modality_fusion/'
 
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
-voxel_size = [0.2, 0.2, 8]
+voxel_size = [0.1, 0.1, 0.2]
 
 img_norm_cfg = dict(
     mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
@@ -31,35 +31,37 @@ model = dict(
     # use
     #refer https://github.com/open-mmlab/mmdetection3d/blob/master/configs/_base_/models/centerpoint_02pillar_second_secfpn_nus.py
     pts_voxel_layer=dict(
-        max_num_points=20,
+        max_num_points=10, 
         point_cloud_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
-        voxel_size=voxel_size,
-        max_voxels=(30000, 40000)),
-    pts_voxel_encoder=dict(
-        type='PillarFeatureNet',
-        in_channels=5,
-        feat_channels=[64],
-        with_distance=False,
-        voxel_size=(0.2, 0.2, 8),
-        norm_cfg=dict(type='naiveSyncBN1d', eps=1e-3, momentum=0.01),
-        legacy=False),
+        voxel_size=voxel_size, 
+        max_voxels=(90000, 120000)),
+    pts_voxel_encoder=dict(type='HardSimpleVFE', num_features=5),
     pts_middle_encoder=dict(
-        type='PointPillarsScatter', in_channels=64, output_shape=[512, 512]),
+        type='SparseEncoder',
+        in_channels=5,
+        sparse_shape=[41, 1024, 1024],
+        output_channels=128,
+        order=('conv', 'norm', 'act'),
+        encoder_channels=((16, 16, 32), (32, 32, 64), (64, 64, 128), (128,
+                                                                      128)),
+        encoder_paddings=((0, 0, 1), (0, 0, 1), (0, 0, [0, 1, 1]), (0, 0)),
+        block_type='basicblock'),
     pts_backbone=dict(
         type='SECOND',
-        in_channels=64,
+        in_channels=256,
+        out_channels=[128, 256],
+        layer_nums=[5, 5],
+        layer_strides=[1, 2],
         norm_cfg=dict(type='naiveSyncBN2d', eps=1e-3, momentum=0.01),
-        layer_nums=[3, 5, 5],
-        layer_strides=[2, 2, 2],
-        out_channels=[64, 128, 256]),
+        conv_cfg=dict(type='Conv2d', bias=False)),
     pts_neck=dict(
-        type='FPN',
-        norm_cfg=dict(type='naiveSyncBN2d', eps=1e-3, momentum=0.01),
-        act_cfg=dict(type='ReLU'),
-        in_channels=[64, 128, 256],
-        out_channels=256,
-        start_level=1,
-        num_outs=4),
+        type='SECONDFPNv2',
+        in_channels=[128, 256],
+        out_channels=[256, 256],
+        upsample_strides=[1, 2],
+        norm_cfg=dict(type='BN', eps=1e-3, momentum=0.01),
+        upsample_cfg=dict(type='deconv', bias=False),
+        use_conv_for_no_stride=True),
     pts_bbox_head=dict(
         type='DeformableDETR3DCamHeadPoint',
         num_query=300,
@@ -83,12 +85,13 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAttenPointOffset',
+                            type='Detr3DCamCrossAttenPoint',
                             pc_range=point_cloud_range,
                             use_dconv=True,
                             use_level_cam_embed=True,
                             num_points=1,
-                            embed_dims=256)
+                            embed_dims=256,
+                            num_levels=2)
                     ],
                     feedforward_channels=512,
                     ffn_dropout=0.1,
@@ -116,10 +119,10 @@ model = dict(
         loss_iou=dict(type='GIoU3DLoss', loss_weight=0.0)),
     # model training and testing settings
     train_cfg=dict(
-        grid_size=[512, 512, 1],
+        grid_size=[1024, 1024, 40],
         voxel_size=voxel_size,
         point_cloud_range=point_cloud_range,
-        out_size_factor=4,
+        out_size_factor=8,
         dense_reg=1,
         gaussian_overlap=0.1,
         max_objs=500,
@@ -138,7 +141,7 @@ model = dict(
         max_pool_nms=False,
         min_radius=[4, 12, 10, 1, 0.85, 0.175],
         score_threshold=0.1,
-        out_size_factor=4,
+        out_size_factor=8,
         voxel_size=voxel_size,
         nms_type='rotate',
         pre_max_size=1000,
@@ -313,9 +316,9 @@ optimizer = dict(
             'img_backbone': dict(lr_mult=0.1),
             #'offsets': dict(lr_mult=0.1),
             #'reference_points': dict(lr_mult=0.1)
+            'pts_backbone': dict(lr_mult=0.1),
             'pts_voxel_encoder': dict(lr_mult=0.1),
             'pts_middle_encoder': dict(lr_mult=0.1),
-            'pts_backbone': dict(lr_mult=0.1),
         }),
     weight_decay=0.01)
 
@@ -351,4 +354,4 @@ runner = dict(type='EpochBasedRunner', max_epochs=20)
 
 find_unused_parameters = False
 
-load_from='/public/MARS/models/surrdet/points_model/centerpoint_02pillar_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201004_170716-a134a233.pth'
+load_from = '/public/MARS/models/surrdet/points_model/centerpoint_01voxel_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201001_135205-5db91e00.pth'

@@ -87,7 +87,7 @@ model = dict(
                             pc_range=point_cloud_range,
                             use_dconv=True,
                             use_level_cam_embed=True,
-                            num_points=1,
+                            num_points=8,
                             embed_dims=256)
                     ],
                     feedforward_channels=512,
@@ -284,7 +284,7 @@ eval_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=12,
+    samples_per_gpu=8,
     workers_per_gpu=4,
     train=dict(
         type='CBGSDataset',
@@ -307,7 +307,7 @@ data = dict(
 
 optimizer = dict(
     type='AdamW',
-    lr=3e-4,
+    lr=2e-4,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
@@ -349,6 +349,6 @@ evaluation = dict(interval=2, pipeline=eval_pipeline)
 
 runner = dict(type='EpochBasedRunner', max_epochs=20)
 
-find_unused_parameters = False
+find_unused_parameters = True
 
 load_from='/public/MARS/models/surrdet/points_model/centerpoint_02pillar_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201004_170716-a134a233.pth'

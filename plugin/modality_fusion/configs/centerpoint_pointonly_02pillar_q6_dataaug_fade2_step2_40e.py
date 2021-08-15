@@ -62,7 +62,7 @@ model = dict(
         num_outs=4),
     pts_bbox_head=dict(
         type='DeformableDETR3DCamHeadPoint',
-        num_query=300,
+        num_query=600,
         num_classes=10,
         in_channels=256,
         sync_cls_avg_factor=True,
@@ -83,7 +83,7 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAttenPointOffset',
+                            type='Detr3DCamCrossAttenPoint',
                             pc_range=point_cloud_range,
                             use_dconv=True,
                             use_level_cam_embed=True,
@@ -98,7 +98,7 @@ model = dict(
             type='DETR3DCoder',
             post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
             pc_range=point_cloud_range,
-            max_num=300,
+            max_num=500,
             voxel_size=voxel_size,
             num_classes=10),
         positional_encoding=dict(
@@ -202,17 +202,17 @@ train_pipeline = [
         pad_empty_sweeps=True,
         remove_close=True),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
-    dict(type='ObjectSample', db_sampler=db_sampler),
-    dict(
-        type='GlobalRotScaleTrans',
-        rot_range=[-0.3925, 0.3925],
-        scale_ratio_range=[0.95, 1.05],
-        translation_std=[0, 0, 0]),
-    dict(
-        type='RandomFlip3D',
-        sync_2d=False,
-        flip_ratio_bev_horizontal=0.5,
-        flip_ratio_bev_vertical=0.5),
+    #dict(type='ObjectSample', db_sampler=db_sampler),
+    #dict(
+    #    type='GlobalRotScaleTrans',
+    #    rot_range=[-0.3925, 0.3925],
+    #    scale_ratio_range=[0.95, 1.05],
+    #    translation_std=[0, 0, 0]),
+    #dict(
+    #    type='RandomFlip3D',
+    #    sync_2d=False,
+    #    flip_ratio_bev_horizontal=0.5,
+    #    flip_ratio_bev_vertical=0.5),
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
@@ -287,8 +287,8 @@ data = dict(
     samples_per_gpu=12,
     workers_per_gpu=4,
     train=dict(
-        type='CBGSDataset',
-        dataset=dict(
+        #type='CBGSDataset',
+        #dataset=dict(
             type=dataset_type,
             data_root=data_root,
             ann_file=data_root + 'nuscenes_infos_train.pkl',
@@ -300,7 +300,7 @@ data = dict(
             # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
             # and box_type_3d='Depth' in sunrgbd and scannet dataset.
             box_type_3d='LiDAR'),
-     ),
+    # ),
     val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality),
     test=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality))
 
@@ -313,24 +313,22 @@ optimizer = dict(
             'img_backbone': dict(lr_mult=0.1),
             #'offsets': dict(lr_mult=0.1),
             #'reference_points': dict(lr_mult=0.1)
-            'pts_voxel_encoder': dict(lr_mult=0.1),
-            'pts_middle_encoder': dict(lr_mult=0.1),
-            'pts_backbone': dict(lr_mult=0.1),
+
         }),
     weight_decay=0.01)
 
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=10, norm_type=2))
 
-'''
+
 lr_config = dict(
     policy='step',
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[10, 16, 19])
-'''
+    step=[2, 5])
 
+'''
 lr_config = dict(
     policy='cyclic',
     target_ratio=(10, 1e-4),
@@ -343,12 +341,12 @@ momentum_config = dict(
     cyclic_times=1,
     step_ratio_up=0.4,
 )
+'''
+total_epochs = 6
+evaluation = dict(interval=3, pipeline=eval_pipeline)
 
-total_epochs = 20
-evaluation = dict(interval=2, pipeline=eval_pipeline)
-
-runner = dict(type='EpochBasedRunner', max_epochs=20)
+runner = dict(type='EpochBasedRunner', max_epochs=6)
 
 find_unused_parameters = False
 
-load_from='/public/MARS/models/surrdet/points_model/centerpoint_02pillar_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201004_170716-a134a233.pth'
+load_from='/home/chenxy/mmdetection3d/work_dirs/centerpoint_pointonly_02pillar_q6_dataaug_step2_40e/epoch_6.pth'

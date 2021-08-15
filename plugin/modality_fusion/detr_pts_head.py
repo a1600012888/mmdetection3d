@@ -175,7 +175,8 @@ class DeformableDETR3DCamHeadPoint(DETRHead):
             'all_cls_scores': outputs_classes,
             'all_bbox_preds': outputs_coords,
             'enc_cls_scores': None,
-            'enc_bbox_preds': None, 
+            'enc_bbox_preds': None,
+            'reference_points': inter_references
         }
         return outs
 

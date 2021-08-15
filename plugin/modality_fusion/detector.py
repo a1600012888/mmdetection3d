@@ -1,10 +1,13 @@
 import torch
+import time
 
 from mmdet3d.core import bbox3d2result, merge_aug_bboxes_3d
 from mmdet.models import DETECTORS
 from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from mmdet3d.models.utils.grid import GridMask
 
+from torchvision import utils as vutils
+from .utils import get_pts_bev
 
 @DETECTORS.register_module()
 class Detr3DCamModalityFusion(MVXTwoStageDetector):
@@ -74,6 +77,7 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
                 img = img.view(B * N, C, H, W)
             if self.use_grid_mask:
                 img = self.grid_mask(img)
+            img.requires_grad = True
             img_feats = self.img_backbone(img)
         else:
             return None
@@ -349,9 +353,7 @@ class Detr3DCamPoint(MVXTwoStageDetector):
         #print('voxel_feat', voxel_features.size())
         #print(batch_size)
         x = self.pts_middle_encoder(voxel_features, coors, batch_size.item())
-        #print('after_middle', x.size())
         x = self.pts_backbone(x)
-        #print('after_backbone', x.size())
         if self.with_pts_neck:
             x = self.pts_neck(x)
         return x
@@ -390,6 +392,7 @@ class Detr3DCamPoint(MVXTwoStageDetector):
         outs = self.pts_bbox_head(pts_feats, img_metas)
         loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
         losses = self.pts_bbox_head.loss(*loss_inputs)
+        losses.update({'reference_points':outs['reference_points']})
         return losses
 
     def forward_train(self,
@@ -436,7 +439,14 @@ class Detr3DCamPoint(MVXTwoStageDetector):
         losses_pts = self.forward_pts_train(pts_feats, gt_bboxes_3d,
                                             gt_labels_3d, img_metas,
                                             gt_bboxes_ignore)
+        #pts_bev = get_pts_bev(points, losses_pts['reference_points'])
+        #pts_bev.unsqueeze(dim=0)
+        #timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+        #vutils.save_image(pts_bev, 'init_pts_bev/' + timestamp + '.jpg')
+        #print(pts_bev.size())
+        #losses.update({'pts_bev': pts_bev.cuda()})
         losses.update(losses_pts)
+        losses.pop('reference_points')
         return losses
 
     def simple_test_mdfs(self, pts_feats, img_feats, img_metas, rescale=False):

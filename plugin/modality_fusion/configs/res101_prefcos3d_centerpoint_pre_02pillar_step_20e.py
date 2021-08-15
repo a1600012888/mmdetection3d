@@ -24,11 +24,31 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamPoint',
+    type='Detr3DCamModalityFusion',
     use_grid_mask=True, # use grid mask
-    img_backbone=None,
-    img_neck=None,
-    # use
+    img_backbone=dict(
+        type='ResNet',
+        #pretrained='open-mmlab://detectron2/resnet101_caffe',
+        with_cp=True,
+        depth=101,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=1,
+        norm_cfg=dict(type='naiveSyncBN2d', requires_grad=False),
+        norm_eval=True,
+        style='caffe',
+        dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
+        stage_with_dcn=(False, False, True, True)),
+    img_neck=dict(
+        type='FPN',
+        in_channels=[256, 512, 1024, 2048],
+        out_channels=256,
+        start_level=1,
+        add_extra_convs=True,
+        extra_convs_on_inputs=False,  # use P5
+        num_outs=4,
+        norm_cfg=dict(type='naiveSyncBN2d'),
+        relu_before_extra_convs=True),
     #refer https://github.com/open-mmlab/mmdetection3d/blob/master/configs/_base_/models/centerpoint_02pillar_second_secfpn_nus.py
     pts_voxel_layer=dict(
         max_num_points=20,
@@ -61,29 +81,29 @@ model = dict(
         start_level=1,
         num_outs=4),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamHeadPoint',
-        num_query=300,
+        type='DeformableDETR3DCamHeadModalityFusion',
+        num_query=600,
         num_classes=10,
         in_channels=256,
         sync_cls_avg_factor=True,
         with_box_refine=True,
         as_two_stage=False,
         transformer=dict(
-            type='Detr3DCamTransformerPoint',
+            type='Detr3DCamTransformerModalityFusion',
             decoder=dict(
-                type='Detr3DCamTransformerDecoderPoint',
+                type='Detr3DCamTransformerDecoder',
                 num_layers=6,
                 return_intermediate=True,
                 transformerlayers=dict(
                     type='DetrTransformerDecoderLayer',
                     attn_cfgs=[
                         dict(
-                            type='MultiheadAttention',
+                            type='MultiheadAttentionModalityFusion',
                             embed_dims=256,
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAttenPointOffset',
+                            type='Detr3DCamCrossAttenModalityFusion',
                             pc_range=point_cloud_range,
                             use_dconv=True,
                             use_level_cam_embed=True,
@@ -98,7 +118,7 @@ model = dict(
             type='DETR3DCoder',
             post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
             pc_range=point_cloud_range,
-            max_num=300,
+            max_num=500,
             voxel_size=voxel_size,
             num_classes=10),
         positional_encoding=dict(
@@ -202,17 +222,17 @@ train_pipeline = [
         pad_empty_sweeps=True,
         remove_close=True),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
-    dict(type='ObjectSample', db_sampler=db_sampler),
-    dict(
-        type='GlobalRotScaleTrans',
-        rot_range=[-0.3925, 0.3925],
-        scale_ratio_range=[0.95, 1.05],
-        translation_std=[0, 0, 0]),
-    dict(
-        type='RandomFlip3D',
-        sync_2d=False,
-        flip_ratio_bev_horizontal=0.5,
-        flip_ratio_bev_vertical=0.5),
+    # dict(type='ObjectSample', db_sampler=db_sampler),
+    # dict(
+    #     type='GlobalRotScaleTrans',
+    #     rot_range=[-0.3925, 0.3925],
+    #     scale_ratio_range=[0.95, 1.05],
+    #     translation_std=[0, 0, 0]),
+    # dict(
+    #     type='RandomFlip3D',
+    #     sync_2d=False,
+    #     flip_ratio_bev_horizontal=0.5,
+    #     flip_ratio_bev_vertical=0.5),
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
@@ -239,19 +259,12 @@ test_pipeline = [
         remove_close=True),
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
-    #revise
     dict(
         type='MultiScaleFlipAug3D',
         img_scale=(1333, 800),
         pts_scale_ratio=1,
         flip=False,
         transforms=[
-            dict(
-                type='GlobalRotScaleTrans',
-                rot_range=[0, 0],
-                scale_ratio_range=[1., 1.],
-                translation_std=[0, 0, 0]),
-            dict(type='RandomFlip3D'),
             dict(
                 type='DefaultFormatBundle3D',
                 class_names=class_names,
@@ -284,11 +297,11 @@ eval_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=12,
+    samples_per_gpu=1,
     workers_per_gpu=4,
     train=dict(
-        type='CBGSDataset',
-        dataset=dict(
+        # type='CBGSDataset',
+        # dataset=dict(
             type=dataset_type,
             data_root=data_root,
             ann_file=data_root + 'nuscenes_infos_train.pkl',
@@ -300,14 +313,15 @@ data = dict(
             # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
             # and box_type_3d='Depth' in sunrgbd and scannet dataset.
             box_type_3d='LiDAR'),
-     ),
+    # ),
     val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality),
     test=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality))
 
+#workflow = [('val', 1)]
 
 optimizer = dict(
     type='AdamW',
-    lr=3e-4,
+    lr=1e-4,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
@@ -322,27 +336,12 @@ optimizer = dict(
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=10, norm_type=2))
 
-'''
 lr_config = dict(
     policy='step',
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[10, 16, 19])
-'''
-
-lr_config = dict(
-    policy='cyclic',
-    target_ratio=(10, 1e-4),
-    cyclic_times=1,
-    step_ratio_up=0.4,
-)
-momentum_config = dict(
-    policy='cyclic',
-    target_ratio=(0.85 / 0.95, 1),
-    cyclic_times=1,
-    step_ratio_up=0.4,
-)
+    step=[16, 19])
 
 total_epochs = 20
 evaluation = dict(interval=2, pipeline=eval_pipeline)
@@ -351,4 +350,4 @@ runner = dict(type='EpochBasedRunner', max_epochs=20)
 
 find_unused_parameters = False
 
-load_from='/public/MARS/models/surrdet/points_model/centerpoint_02pillar_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201004_170716-a134a233.pth'
+load_from = '/public/MARS/models/surrdet/pts_img_models/fcos3d_02pillar_q6_fade_40e.pth'

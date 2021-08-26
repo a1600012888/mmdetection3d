@@ -213,11 +213,26 @@ def _fill_trainval_infos(nusc,
 
         for radar_name in radar_names:
             radar_token = sample['data'][radar_name]
-            radar_path, _, radar_intrin = nusc.get_sample_data(radar_token)
+            radar_rec = nusc.get('sample_data', radar_token)
+            sweeps = []
 
-            radar_info = obtain_sensor2top(nusc, radar_token, l2e_t, l2e_r_mat,
-                                         e2g_t, e2g_r_mat, radar_name)
-            info['radars'].update({radar_name: radar_info})
+            while len(sweeps) < 5:
+                if not radar_rec['prev'] == '':
+                    radar_path, _, radar_intrin = nusc.get_sample_data(radar_token)
+
+                    radar_info = obtain_sensor2top(nusc, radar_token, l2e_t, l2e_r_mat,
+                                                e2g_t, e2g_r_mat, radar_name)
+                    sweeps.append(radar_info)
+                    radar_token = radar_rec['prev']
+                    radar_rec = nusc.get('sample_data', radar_token)
+                else:
+                    radar_path, _, radar_intrin = nusc.get_sample_data(radar_token)
+
+                    radar_info = obtain_sensor2top(nusc, radar_token, l2e_t, l2e_r_mat,
+                                                e2g_t, e2g_r_mat, radar_name)
+                    sweeps.append(radar_info)
+            
+            info['radars'].update({radar_name: sweeps})
         # obtain sweeps for a single key-frame
         sd_rec = nusc.get('sample_data', sample['data']['LIDAR_TOP'])
         sweeps = []
@@ -629,4 +644,4 @@ def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
 
 
 if __name__ == '__main__':
-    create_nuscenes_infos('data/nuscenes/', 'radar_nuscenes')
+    create_nuscenes_infos('data/nuscenes/', 'radar_nuscenes_5sweeps')

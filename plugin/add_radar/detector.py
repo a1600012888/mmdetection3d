@@ -69,6 +69,7 @@ class Detr3DCamRadar(MVXTwoStageDetector):
                 img = img.view(B * N, C, H, W)
             if self.use_grid_mask:
                 img = self.grid_mask(img)
+            #img.requires_grad = True
             img_feats = self.img_backbone(img)
         else:
             return None
@@ -84,7 +85,7 @@ class Detr3DCamRadar(MVXTwoStageDetector):
         """Extract features from images and points."""
         img_feats = self.extract_img_feat(img, img_metas)
         # [B, M, K]
-        radar_feats, masks = self.radar_encoder(radar)
+        radar_feats = self.radar_encoder(radar)
         return (img_feats, None, radar_feats)
 
     def forward_pts_train(self,

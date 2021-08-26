@@ -5,3 +5,6 @@ bash tools/dist_test.sh configs/detr3d_cam/new_model.py models/epoch_12.pth  4 -
 
 # over test
 bash tools/dist_test.sh configs/detr3d_cam/test_new_model.py models/epoch_12.pth  4 --eval bbox
+
+#
+CUDA_VISIBLE_DEVICES=1, python3 tools/test.py plugin/nerf_pos_offsets/configs_test/fcos3d_normal.py /public/MARS/models/surrdet/image_models/fcos3d_r101_ft.pth --eval bbox

@@ -1,18 +1,16 @@
 _base_ = [
-    '../_base_/datasets/nus-3d.py',
-    # '../_base_/schedules/mmdet_schedule_1x.py',
-    # '../_base_/schedules/cyclic_20e.py',
-    '../_base_/default_runtime.py'
+    '../../_base_/datasets/nus-3d.py',
+    '../../_base_/default_runtime.py'
 ]
+plugin=True
+plugin_dir='plugin/add_radar/'
 
-# If point cloud range is changed, the models should also change their point
-# cloud range accordingly
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_size = [0.2, 0.2, 8]
 
 img_norm_cfg = dict(
     mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
-# For nuScenes we usually do 10-class detection
+
 class_names = [
     'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',
     'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
@@ -26,15 +24,17 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCam',
+    type='Detr3DCamRadar',
+    use_grid_mask=True, # use grid mask
     img_backbone=dict(
         type='ResNet',
-        pretrained='open-mmlab://detectron2/resnet101_caffe',
+        with_cp=False,
+        #pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        norm_cfg=dict(type='naiveSyncBN2d', requires_grad=False),
+        norm_cfg=dict(type='BN2d', requires_grad=False),
         norm_eval=True,
         style='caffe',
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
@@ -47,10 +47,15 @@ model = dict(
         add_extra_convs=True,
         extra_convs_on_inputs=False,  # use P5
         num_outs=4,
-        norm_cfg=dict(type='naiveSyncBN2d'),
+        norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
+    radar_encoder=dict(
+        type='RadarPointEncoderXY',
+        in_channels=10,
+        out_channels=[32, 64],
+        norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01),),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamHead',
+        type='DeformableDETR3DCamRadarHead',
         num_query=300,
         num_classes=10,
         in_channels=256,
@@ -58,9 +63,9 @@ model = dict(
         with_box_refine=True,
         as_two_stage=False,
         transformer=dict(
-            type='Detr3DCamTransformer',
+            type='Detr3DCamRadarTransformer',
             decoder=dict(
-                type='Detr3DCamTransformerDecoder',
+                type='Detr3DCamRadarTransformerDecoder',
                 num_layers=6,
                 return_intermediate=True,
                 transformerlayers=dict(
@@ -72,12 +77,14 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAtten',
+                            type='Detr3DCamRadarSparseDynamicCrossAtten',
                             pc_range=point_cloud_range,
-                            use_dconv=True,
-                            use_level_cam_embed=True,
+                            use_dconv=False,
+                            use_level_cam_embed=False,
                             num_points=1,
-                            embed_dims=256)
+                            radar_topk=10,
+                            embed_dims=256,
+                            radar_dims=64, )
                     ],
                     feedforward_channels=512,
                     ffn_dropout=0.1,
@@ -134,7 +141,7 @@ model = dict(
         post_max_size=83,
         nms_thr=0.2))
 
-dataset_type = 'NuScenesDataset'
+dataset_type = 'NuScenesDatasetRadar'
 data_root = 'data/nuscenes/'
 
 file_client_args = dict(backend='disk')
@@ -175,6 +182,9 @@ db_sampler = dict(
         use_dim=[0, 1, 2, 3, 4],
         file_client_args=file_client_args))
 
+# x y z rcs vx_comp vy_comp x_rms y_rms vx_rms vy_rms
+radar_use_dims = [0, 1, 2, 5, 8, 9, 12, 13, 16, 17]
+
 train_pipeline = [
     dict(
         type='LoadPointsFromFile',
@@ -182,6 +192,11 @@ train_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
+    dict(
+        type='LoadRadarPoints',
+        load_dim=18,
+        use_dim=radar_use_dims,
+        max_num=150, ),
     dict(type='LoadMultiViewImageFromFiles'),
     dict(
         type='LoadPointsFromMultiSweeps',
@@ -209,7 +224,7 @@ train_pipeline = [
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
-    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'img'])
+    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'img', 'radar'])
 ]
 test_pipeline = [
     dict(
@@ -218,6 +233,11 @@ test_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
+    dict(
+        type='LoadRadarPoints',
+        load_dim=18,
+        use_dim=radar_use_dims,
+        max_num=150, ),
     dict(type='LoadMultiViewImageFromFiles'),
     dict(
         type='LoadPointsFromMultiSweeps',
@@ -238,7 +258,7 @@ test_pipeline = [
                 type='DefaultFormatBundle3D',
                 class_names=class_names,
                 with_label=False),
-            dict(type='Collect3D', keys=['points', 'img'])
+            dict(type='Collect3D', keys=['points', 'img', 'radar'])
         ])
 ]
 
@@ -273,7 +293,7 @@ data = dict(
         # dataset=dict(
             type=dataset_type,
             data_root=data_root,
-            ann_file=data_root + 'nuscenes_infos_train.pkl',
+            ann_file=data_root + 'radar_nuscenes_infos_train_radar.pkl',
             pipeline=train_pipeline,
             classes=class_names,
             modality=input_modality,
@@ -283,13 +303,25 @@ data = dict(
             # and box_type_3d='Depth' in sunrgbd and scannet dataset.
             box_type_3d='LiDAR'),
     # ),
-    val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality),
-    test=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality))
+    val=dict(
+            type=dataset_type,
+            pipeline=test_pipeline, classes=class_names, modality=input_modality,
+            ann_file=data_root + 'radar_nuscenes_infos_val_radar.pkl',),
+    test=dict(
+            type=dataset_type,
+            pipeline=test_pipeline, classes=class_names, modality=input_modality,
+            ann_file=data_root + 'radar_nuscenes_infos_val_radar.pkl',),)
 
 optimizer = dict(
     type='AdamW',
-    lr=1e-4,
-    weight_decay=0.0001)
+    lr=2e-4,
+    paramwise_cfg=dict(
+        custom_keys={
+            'img_backbone': dict(lr_mult=0.1),
+            #'offsets': dict(lr_mult=0.1),
+            #'reference_points': dict(lr_mult=0.1)
+        }),
+    weight_decay=0.01)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
@@ -302,5 +334,6 @@ total_epochs = 12
 evaluation = dict(interval=2, pipeline=eval_pipeline)
 
 runner = dict(type='EpochBasedRunner', max_epochs=12)
-find_unused_parameters = True
-load_from='work_dirs/baseline/epoch_8.pth'
+
+find_unused_parameters = False
+load_from='work_dirs/models/fcos3d.pth'

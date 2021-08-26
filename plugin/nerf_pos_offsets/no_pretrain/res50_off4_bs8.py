@@ -1,18 +1,16 @@
 _base_ = [
-    '../_base_/datasets/nus-3d.py',
-    # '../_base_/schedules/mmdet_schedule_1x.py', 
-    '../_base_/schedules/cyclic_20e.py', 
-    '../_base_/default_runtime.py'
+    '../../_base_/datasets/nus-3d.py',
+    '../../_base_/default_runtime.py'
 ]
+plugin=True
+plugin_dir='plugin/nerf_pos_offsets/'
 
-# If point cloud range is changed, the models should also change their point
-# cloud range accordingly
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_size = [0.2, 0.2, 8]
 
 img_norm_cfg = dict(
-    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
-# For nuScenes we usually do 10-class detection
+    mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
+
 class_names = [
     'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',
     'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
@@ -27,16 +25,20 @@ input_modality = dict(
 
 model = dict(
     type='Detr3DCam',
+    use_grid_mask=True, # use grid mask
     img_backbone=dict(
-        pretrained='torchvision://resnet50',
         type='ResNet',
+        with_cp=False,
+        pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        norm_cfg=dict(type='naiveSyncBN2d', requires_grad=False),
+        norm_cfg=dict(type='BN2d', requires_grad=False),
         norm_eval=True,
-        style='pytorch'),
+        style='caffe',
+        dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
+        stage_with_dcn=(False, False, True, True)),
     img_neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -45,13 +47,15 @@ model = dict(
         add_extra_convs=True,
         extra_convs_on_inputs=False,  # use P5
         num_outs=4,
-        norm_cfg=dict(type='naiveSyncBN2d'),
+        norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamHead',
+        type='DeformableDETR3DCamHeadPos',
         num_query=300,
         num_classes=10,
         in_channels=256,
+        num_feature_levels=4,
+        num_cams=6,
         sync_cls_avg_factor=True,
         with_box_refine=True,
         as_two_stage=False,
@@ -65,14 +69,17 @@ model = dict(
                     type='DetrTransformerDecoderLayer',
                     attn_cfgs=[
                         dict(
-                            type='MLPAttn',
+                            type='MultiheadAttention',
                             embed_dims=256,
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAtten',
+                            type='Detr3DCamCrossAttenOffsets',
                             pc_range=point_cloud_range,
-                            num_points=1,
+                            use_dconv=False,
+                            use_level_cam_embed=False,
+                            num_points=4,
+                            pos_embed_dims=16,
                             embed_dims=256)
                     ],
                     feedforward_channels=512,
@@ -85,7 +92,7 @@ model = dict(
             pc_range=point_cloud_range,
             max_num=300,
             voxel_size=voxel_size,
-            num_classes=10), 
+            num_classes=10),
         positional_encoding=dict(
             type='SinePositionalEncoding',
             num_feats=128,
@@ -135,42 +142,6 @@ data_root = 'data/nuscenes/'
 
 file_client_args = dict(backend='disk')
 
-db_sampler = dict(
-    data_root=data_root,
-    info_path=data_root + 'nuscenes_dbinfos_train.pkl',
-    rate=1.0,
-    prepare=dict(
-        filter_by_difficulty=[-1],
-        filter_by_min_points=dict(
-            car=5,
-            truck=5,
-            bus=5,
-            trailer=5,
-            construction_vehicle=5,
-            traffic_cone=5,
-            barrier=5,
-            motorcycle=5,
-            bicycle=5,
-            pedestrian=5)),
-    classes=class_names,
-    sample_groups=dict(
-        car=2,
-        truck=3,
-        construction_vehicle=7,
-        bus=4,
-        trailer=6,
-        barrier=2,
-        motorcycle=6,
-        bicycle=6,
-        pedestrian=2,
-        traffic_cone=2),
-    points_loader=dict(
-        type='LoadPointsFromFile',
-        coord_type='LIDAR',
-        load_dim=5,
-        use_dim=[0, 1, 2, 3, 4],
-        file_client_args=file_client_args))
-
 train_pipeline = [
     dict(
         type='LoadPointsFromFile',
@@ -181,23 +152,12 @@ train_pipeline = [
     dict(type='LoadMultiViewImageFromFiles'),
     dict(
         type='LoadPointsFromMultiSweeps',
-        sweeps_num=9,
+        sweeps_num=1,
         use_dim=[0, 1, 2, 3, 4],
         file_client_args=file_client_args,
         pad_empty_sweeps=True,
         remove_close=True),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
-    # dict(type='ObjectSample', db_sampler=db_sampler),
-    # dict(
-    #     type='GlobalRotScaleTrans',
-    #     rot_range=[-0.3925, 0.3925],
-    #     scale_ratio_range=[0.95, 1.05],
-    #     translation_std=[0, 0, 0]),
-    # dict(
-    #     type='RandomFlip3D',
-    #     sync_2d=False,
-    #     flip_ratio_bev_horizontal=0.5,
-    #     flip_ratio_bev_vertical=0.5),
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
@@ -217,7 +177,7 @@ test_pipeline = [
     dict(type='LoadMultiViewImageFromFiles'),
     dict(
         type='LoadPointsFromMultiSweeps',
-        sweeps_num=9,
+        sweeps_num=1,
         use_dim=[0, 1, 2, 3, 4],
         file_client_args=file_client_args,
         pad_empty_sweeps=True,
@@ -244,7 +204,7 @@ eval_pipeline = [
     dict(
         type='LoadPointsFromFile',
         coord_type='LIDAR',
-        load_dim=5,
+        load_dim=1,
         use_dim=5,
         file_client_args=file_client_args),
     dict(
@@ -262,14 +222,14 @@ eval_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=2,
+    samples_per_gpu=1,
     workers_per_gpu=4,
     train=dict(
         # type='CBGSDataset',
         # dataset=dict(
             type=dataset_type,
             data_root=data_root,
-            ann_file=data_root + 'nuscenes_infos_train.pkl',
+            ann_file=data_root + 'radar_nuscenes_infos_train_radar.pkl',
             pipeline=train_pipeline,
             classes=class_names,
             modality=input_modality,
@@ -279,30 +239,33 @@ data = dict(
             # and box_type_3d='Depth' in sunrgbd and scannet dataset.
             box_type_3d='LiDAR'),
     # ),
-    val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality),
-    test=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality))
+    val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality,
+             ann_file=data_root + 'radar_nuscenes_infos_val_radar.pkl',),
+    test=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality,
+              ann_file=data_root + 'radar_nuscenes_infos_val_radar.pkl', ))
 
-# optimizer = dict(
-#     lr=0.002, paramwise_cfg=dict(bias_lr_mult=2., bias_decay_mult=0.))
-# optimizer_config = dict(
-#     _delete_=True, grad_clip=dict(max_norm=35, norm_type=2))
-# # learning policy
-# lr_config = dict(
-#     policy='step',
-#     warmup='linear',
-#     warmup_iters=500,
-#     warmup_ratio=1.0 / 3,
-#     step=[8, 11])
-# total_epochs = 12
-evaluation = dict(interval=2, pipeline=eval_pipeline)
-
-
-runner = dict(type='EpochBasedRunner', max_epochs=6)
 optimizer = dict(
+    type='AdamW',
+    lr=4e-4,
     paramwise_cfg=dict(
+        bias_lr_mult=2., bias_decay_mult=0.,
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
+            'offsets': dict(lr_mult=0.1),
+            'reference_points': dict(lr_mult=0.1)
         }),
-    weight_decay=0.0001)
+    weight_decay=0.001)
+optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
+# learning policy
+lr_config = dict(
+    policy='step',
+    warmup='linear',
+    warmup_iters=500,
+    warmup_ratio=1.0 / 3,
+    step=[20, 23])
+total_epochs = 24
+evaluation = dict(interval=2, pipeline=eval_pipeline)
+
+runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = True

@@ -24,10 +24,11 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCam',
+    type='Detr3DCamRadar',
     use_grid_mask=True, # use grid mask
     img_backbone=dict(
         type='ResNet',
+        with_cp=False,
         #pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=101,
         num_stages=4,
@@ -48,8 +49,13 @@ model = dict(
         num_outs=4,
         norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
+    radar_encoder=dict(
+        type='RadarPointEncoder',
+        in_channels=18,
+        out_channels=[18, 64],
+        norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01),),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamHead',
+        type='DeformableDETR3DCamRadarHead',
         num_query=300,
         num_classes=10,
         in_channels=256,
@@ -57,9 +63,9 @@ model = dict(
         with_box_refine=True,
         as_two_stage=False,
         transformer=dict(
-            type='Detr3DCamTransformer',
+            type='Detr3DCamRadarTransformer',
             decoder=dict(
-                type='Detr3DCamTransformerDecoder',
+                type='Detr3DCamRadarTransformerDecoder',
                 num_layers=6,
                 return_intermediate=True,
                 transformerlayers=dict(
@@ -71,12 +77,13 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAtten',
+                            type='Detr3DCamRadarCrossAtten',
                             pc_range=point_cloud_range,
                             use_dconv=False,
                             use_level_cam_embed=False,
                             num_points=1,
-                            embed_dims=256)
+                            embed_dims=256,
+                            radar_dims=64, )
                     ],
                     feedforward_channels=512,
                     ffn_dropout=0.1,
@@ -133,7 +140,7 @@ model = dict(
         post_max_size=83,
         nms_thr=0.2))
 
-dataset_type = 'NuScenesDataset'
+dataset_type = 'NuScenesDatasetRadar'
 data_root = 'data/nuscenes/'
 
 file_client_args = dict(backend='disk')
@@ -181,6 +188,11 @@ train_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
+    dict(
+        type='LoadRadarPoints',
+        load_dim=18,
+        use_dim=list(range(18)),
+        max_num=150, ),
     dict(type='LoadMultiViewImageFromFiles'),
     dict(
         type='LoadPointsFromMultiSweeps',
@@ -208,7 +220,7 @@ train_pipeline = [
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
-    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'img'])
+    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'img', 'radar'])
 ]
 test_pipeline = [
     dict(
@@ -217,6 +229,11 @@ test_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
+    dict(
+        type='LoadRadarPoints',
+        load_dim=18,
+        use_dim=list(range(18)),
+        max_num=150, ),
     dict(type='LoadMultiViewImageFromFiles'),
     dict(
         type='LoadPointsFromMultiSweeps',
@@ -237,7 +254,7 @@ test_pipeline = [
                 type='DefaultFormatBundle3D',
                 class_names=class_names,
                 with_label=False),
-            dict(type='Collect3D', keys=['points', 'img'])
+            dict(type='Collect3D', keys=['points', 'img', 'radar'])
         ])
 ]
 
@@ -272,7 +289,7 @@ data = dict(
         # dataset=dict(
             type=dataset_type,
             data_root=data_root,
-            ann_file=data_root + 'nuscenes_infos_train.pkl',
+            ann_file=data_root + 'radar_nuscenes_infos_train_radar.pkl',
             pipeline=train_pipeline,
             classes=class_names,
             modality=input_modality,
@@ -282,8 +299,14 @@ data = dict(
             # and box_type_3d='Depth' in sunrgbd and scannet dataset.
             box_type_3d='LiDAR'),
     # ),
-    val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality),
-    test=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality))
+    val=dict(
+            type=dataset_type,
+            pipeline=test_pipeline, classes=class_names, modality=input_modality,
+            ann_file=data_root + 'radar_nuscenes_infos_val_radar.pkl',),
+    test=dict(
+            type=dataset_type,
+            pipeline=test_pipeline, classes=class_names, modality=input_modality,
+            ann_file=data_root + 'radar_nuscenes_infos_val_radar.pkl',),)
 
 optimizer = dict(
     type='AdamW',

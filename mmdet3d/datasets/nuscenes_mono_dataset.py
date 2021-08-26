@@ -68,8 +68,12 @@ class NuScenesMonoDataset(CocoDataset):
                  eval_version='detection_cvpr_2019',
                  use_valid_flag=False,
                  version='v1.0-trainval',
+                 overlap_path=None,
+                 not_overlap=False,
                  **kwargs):
         super().__init__(**kwargs)
+        self.overlap_path = overlap_path
+        self.not_overlap = not_overlap
         self.data_root = data_root
         self.load_interval = load_interval
         self.with_velocity = with_velocity
@@ -409,7 +413,9 @@ class NuScenesMonoDataset(CocoDataset):
             result_path=result_path,
             eval_set=eval_set_map[self.version],
             output_dir=output_dir,
-            verbose=False)
+            verbose=False, 
+            overlap_path=self.overlap_path, 
+            not_overlap=self.not_overlap)
         nusc_eval.main(render_curves=True)
 
         # record metrics

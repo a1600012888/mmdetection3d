@@ -954,11 +954,11 @@ class Detr3DCamTransformer(BaseModule):
 
     def init_layers(self):
         """Initialize layers of the DeformableDetrTransformer."""
-        self.level_embeds = nn.Parameter(
-            torch.Tensor(self.num_feature_levels, self.embed_dims))
+        #self.level_embeds = nn.Parameter(
+        #    torch.Tensor(self.num_feature_levels, self.embed_dims))
 
-        self.cam_embeds = nn.Parameter(
-            torch.Tensor(self.num_cams, self.embed_dims))
+        #self.cam_embeds = nn.Parameter(
+        #    torch.Tensor(self.num_cams, self.embed_dims))
 
         self.reference_points = nn.Linear(self.embed_dims, 3)
 
@@ -971,8 +971,8 @@ class Detr3DCamTransformer(BaseModule):
             if isinstance(m, MultiScaleDeformableAttention):
                 m.init_weight()
         xavier_init(self.reference_points, distribution='uniform', bias=0.)
-        normal_(self.level_embeds)
-        normal_(self.cam_embeds)
+        #normal_(self.level_embeds)
+        #normal_(self.cam_embeds)
 
     def forward(self,
                 mlvl_feats,

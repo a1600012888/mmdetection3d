@@ -1,8 +1,8 @@
 _base_ = [
-    '../_base_/datasets/nus-3d.py',
+    '../../_base_/datasets/nus-3d.py',
     # '../_base_/schedules/mmdet_schedule_1x.py',
     # '../_base_/schedules/cyclic_20e.py',
-    '../_base_/default_runtime.py'
+    '../../_base_/default_runtime.py'
 ]
 
 # If point cloud range is changed, the models should also change their point
@@ -27,14 +27,16 @@ input_modality = dict(
 
 model = dict(
     type='Detr3DCam',
+    use_grid_mask=True,
     img_backbone=dict(
         type='ResNet',
-        pretrained='open-mmlab://detectron2/resnet101_caffe',
+        #pretrained='open-mmlab://detectron2/resnet101_caffe',
+        pretrained=None,
         depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        norm_cfg=dict(type='naiveSyncBN2d', requires_grad=False),
+        norm_cfg=dict(type='BN2d', requires_grad=False),
         norm_eval=True,
         style='caffe',
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
@@ -47,11 +49,11 @@ model = dict(
         add_extra_convs=True,
         extra_convs_on_inputs=False,  # use P5
         num_outs=4,
-        norm_cfg=dict(type='naiveSyncBN2d'),
+        norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
         type='DeformableDETR3DCamHead',
-        num_query=300,
+        num_query=600,
         num_classes=10,
         in_channels=256,
         sync_cls_avg_factor=True,
@@ -74,8 +76,8 @@ model = dict(
                         dict(
                             type='Detr3DCamCrossAtten',
                             pc_range=point_cloud_range,
-                            use_dconv=True,
-                            use_level_cam_embed=True,
+                            use_dconv=False,
+                            use_level_cam_embed=False,
                             num_points=1,
                             embed_dims=256)
                     ],
@@ -95,6 +97,10 @@ model = dict(
             num_feats=128,
             normalize=True,
             offset=-0.5),
+        loss_attr=dict(
+                     type='CrossEntropyLoss',
+                     use_sigmoid=False,
+                     loss_weight=0.0),
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,
@@ -134,7 +140,7 @@ model = dict(
         post_max_size=83,
         nms_thr=0.2))
 
-dataset_type = 'NuScenesDataset'
+dataset_type = 'NuScenesDatasetV2'
 data_root = 'data/nuscenes/'
 
 file_client_args = dict(backend='disk')
@@ -182,7 +188,8 @@ train_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
-    dict(type='LoadMultiViewImageFromFiles'),
+    dict(type='LoadMultiViewImageFromFiles', to_float32=True),
+    dict(type='PhotoMetricDistortion3D'),
     dict(
         type='LoadPointsFromMultiSweeps',
         sweeps_num=9,
@@ -190,7 +197,7 @@ train_pipeline = [
         file_client_args=file_client_args,
         pad_empty_sweeps=True,
         remove_close=True),
-    dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
+    dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True, with_attr_label=True),
     # dict(type='ObjectSample', db_sampler=db_sampler),
     # dict(
     #     type='GlobalRotScaleTrans',
@@ -209,7 +216,7 @@ train_pipeline = [
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
-    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'img'])
+    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'attr_labels', 'img'])
 ]
 test_pipeline = [
     dict(
@@ -218,7 +225,7 @@ test_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
-    dict(type='LoadMultiViewImageFromFiles'),
+    dict(type='LoadMultiViewImageFromFiles', to_float32=True),
     dict(
         type='LoadPointsFromMultiSweeps',
         sweeps_num=9,
@@ -273,7 +280,7 @@ data = dict(
         # dataset=dict(
             type=dataset_type,
             data_root=data_root,
-            ann_file=data_root + 'nuscenes_infos_train.pkl',
+            ann_file=data_root + 'radar_nuscenes_infos_train_radar.pkl',
             pipeline=train_pipeline,
             classes=class_names,
             modality=input_modality,
@@ -283,23 +290,30 @@ data = dict(
             # and box_type_3d='Depth' in sunrgbd and scannet dataset.
             box_type_3d='LiDAR'),
     # ),
-    val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality),
-    test=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality))
+    val=dict(type=dataset_type, overlap_path='/home/zhangty/trainval-val.json', pipeline=test_pipeline, classes=class_names, modality=input_modality, ann_file=data_root + 'radar_nuscenes_infos_val_radar.pkl'),
+    test=dict(type=dataset_type, overlap_path='/home/zhangty/trainval-val.json', pipeline=test_pipeline, classes=class_names, modality=input_modality, ann_file=data_root + 'radar_nuscenes_infos_val_radar.pkl'))
 
 optimizer = dict(
     type='AdamW',
-    lr=1e-5,
-    weight_decay=0.0001)
+    lr=2e-4,
+    paramwise_cfg=dict(
+        custom_keys={
+            'img_backbone': dict(lr_mult=0.1),
+        }),
+    weight_decay=0.01)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
-    policy='step',
+    policy='CosineAnnealing',
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[8, 11])
-total_epochs = 12
+    min_lr_ratio=1e-3)
+total_epochs = 60
 evaluation = dict(interval=2, pipeline=eval_pipeline)
 
-runner = dict(type='EpochBasedRunner', max_epochs=12)
-find_unused_parameters = True
+runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
+# find_unused_parameters = True
+
+#load_from='/public/MARS/models/surrdet/image_models/epoch_59.pth'
+load_from='/public/MARS/models/surrdet/image_models/detrcam_3ddet_fcos3d_pre_24ep.pth'

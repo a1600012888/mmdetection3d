@@ -6,10 +6,10 @@ from nuscenes.utils.data_classes import Box as NuScenesBox
 from os import path as osp
 
 from mmdet.datasets import DATASETS
-from ..core import show_result
-from ..core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
-from .custom_3d import Custom3DDataset
-from .pipelines import Compose
+from mmdet3d.core import show_result
+from mmdet3d.core.bbox import Box3DMode, Coord3DMode, LiDARInstance3DBoxes
+from mmdet3d.datasets.custom_3d import Custom3DDataset
+from mmdet3d.datasets.pipelines import Compose
 
 
 @DATASETS.register_module()

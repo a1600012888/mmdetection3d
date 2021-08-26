@@ -19,6 +19,7 @@ from .semantickitti_dataset import SemanticKITTIDataset
 from .sunrgbd_dataset import SUNRGBDDataset
 from .utils import get_loading_pipeline
 from .waymo_dataset import WaymoDataset
+from .nuscenes_dataset_v2 import NuScenesDatasetV2
 
 __all__ = [
     'KittiDataset', 'KittiMonoDataset', 'GroupSampler',
@@ -31,5 +32,5 @@ __all__ = [
     'SUNRGBDDataset', 'ScanNetDataset', 'ScanNetSegDataset', 'S3DISSegDataset',
     'SemanticKITTIDataset', 'Custom3DDataset', 'Custom3DSegDataset',
     'LoadPointsFromMultiSweeps', 'WaymoDataset', 'BackgroundPointsFilter',
-    'VoxelBasedPointSampler', 'get_loading_pipeline'
+    'VoxelBasedPointSampler', 'get_loading_pipeline', 'NuScenesDatasetV2'
 ]

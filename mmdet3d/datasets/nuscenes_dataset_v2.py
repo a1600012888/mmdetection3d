@@ -114,6 +114,7 @@ class NuScenesDatasetV2(Custom3DDataset):
                  filter_empty_gt=True,
                  test_mode=False,
                  overlap_path=None,
+                 not_overlap=False,
                  eval_version='detection_cvpr_2019',
                  use_valid_flag=False):
         self.load_interval = load_interval
@@ -129,6 +130,7 @@ class NuScenesDatasetV2(Custom3DDataset):
             test_mode=test_mode)
 
         self.overlap_path = overlap_path
+        self.not_overlap = not_overlap
         self.with_velocity = with_velocity
         self.eval_version = eval_version
         from nuscenes.eval.detection.config import config_factory
@@ -213,6 +215,8 @@ class NuScenesDatasetV2(Custom3DDataset):
         if self.modality['use_camera']:
             image_paths = []
             lidar2img_rts = []
+            intrinsics = []
+            extrinsics = []
             for cam_type, cam_info in info['cams'].items():
                 image_paths.append(cam_info['data_path'])
                 # obtain lidar to image transformation matrix
@@ -227,11 +231,15 @@ class NuScenesDatasetV2(Custom3DDataset):
                 viewpad[:intrinsic.shape[0], :intrinsic.shape[1]] = intrinsic
                 lidar2img_rt = (viewpad @ lidar2cam_rt.T)
                 lidar2img_rts.append(lidar2img_rt)
+                intrinsics.append(viewpad)
+                extrinsics.append(lidar2cam_rt.T)
 
             input_dict.update(
                 dict(
                     img_filename=image_paths,
                     lidar2img=lidar2img_rts,
+                    intrinsic=intrinsics,
+                    extrinsic=extrinsics,
                 ))
 
         if not self.test_mode:
@@ -288,37 +296,6 @@ class NuScenesDatasetV2(Custom3DDataset):
             gt_labels_3d=gt_labels_3d,
             gt_names=gt_names_3d)
         return anns_results
-
-    
-    def _format_bbox_all_levels(self, results_all, jsonfile_prefix=None):
-        """Convert the results to the standard format.
-
-        Args:
-            results (list[dict]): Testing results of the dataset.
-            jsonfile_prefix (str): The prefix of the output jsonfile.
-                You can specify the output directory/filename by
-                modifying the jsonfile_prefix. Default: None.
-
-        Returns:
-            str: Path of the output json file.
-        """
-        
-        ret_all = []
-        print('Start to convert detection format...')
-        for results in results_all:
-            
-            ret_single = []
-            for sample_id, det in enumerate(mmcv.track_iter_progress(results)):
-                
-                #boxes = output_to_nusc_box(det)
-                sample_token = self.data_infos[sample_id]['token']
-                det['sample_token'] = sample_token
-
-                ret_single.append(det)
-
-            ret_all.append(ret_single)
-
-        return ret_all
 
     def _format_bbox(self, results, jsonfile_prefix=None):
         """Convert the results to the standard format.
@@ -424,6 +401,7 @@ class NuScenesDatasetV2(Custom3DDataset):
             eval_set=eval_set_map[self.version],
             output_dir=output_dir,
             overlap_path=self.overlap_path,
+            not_overlap=self.not_overlap,
             verbose=False)
         nusc_eval.main(render_curves=False)
 

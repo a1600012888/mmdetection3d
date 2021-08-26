@@ -110,9 +110,9 @@ class Detr3DCamCrossAttenOffsets(BaseModule):
         self.pos_embed_dims = pos_embed_dims
         self.pos_embed_subnet = nn.Sequential(
             nn.Linear(3*pos_embed_dims, embed_dims),
-            nn.LayerNorm(embed_dims), 
+            nn.LayerNorm(embed_dims),
             nn.ReLU(),
-            nn.Linear(embed_dims, embed_dims), 
+            nn.Linear(embed_dims, embed_dims),
         )
 
         # you'd better set dim_per_head to a power of 2
@@ -151,7 +151,7 @@ class Detr3DCamCrossAttenOffsets(BaseModule):
         if self.use_level_cam_embed:
             self.level_embeds = nn.Parameter(
                 torch.Tensor(self.embed_dims, self.num_levels))
-            self.cam_embeds =  nn.Parameter(
+            self.cam_embeds = nn.Parameter(
                 torch.Tensor(self.embed_dims, self.num_cams))
 
         self.init_weight()
@@ -180,7 +180,7 @@ class Detr3DCamCrossAttenOffsets(BaseModule):
         if self.use_level_cam_embed:
             normal_(self.level_embeds)
             normal_(self.cam_embeds)
-    
+
 
     def forward(self,
                 query,
@@ -257,7 +257,8 @@ class Detr3DCamCrossAttenOffsets(BaseModule):
 
         # [B, num_query, num_heads*num_points*3]
         # shape [B, 1, num_query, 1, num_heads, num_points, 3]
-        offsets = self.offsets(query).view(bs, 1, num_query, 1, self.num_heads, self.num_points, 3) * 0.02 / self.num_points  # or not?
+        offsets_norm = query.new_tensor([0.5, 0.5, 0.5]).view(1, 1, 1, 1, 1, 1, 3) / self.num_points
+        offsets = self.offsets(query).view(bs, 1, num_query, 1, self.num_heads, self.num_points, 3) * offsets_norm  # or not?
         # shape [B, num_cam, num_query, num_level, num_heads, num_points, 3]
         offsets = offsets.repeat(1, self.num_cams, 1, self.num_levels, 1, 1, 1)
 
@@ -277,7 +278,7 @@ class Detr3DCamCrossAttenOffsets(BaseModule):
         # attention_weights = attention_weights.view(bs, 1, num_query, self.num_cams * self.num_levels)
         # attention_weights = attention_weights.softmax(-1)
         # attention_weights = attention_weights.view(bs, 1, num_query, self.num_cams, self.num_levels)
-    
+
         # [bs, num_query, num_cams*num_heads*num_points*num_levels]
         # attention_weights = (attention_weights / torch.sqrt(output.new_tensor(self.embed_dims*1.0))).softmax(-1)
         # attention_weights = attention_weights.softmax(-1)

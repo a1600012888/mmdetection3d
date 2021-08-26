@@ -65,6 +65,7 @@ class Detr3DCam(MVXTwoStageDetector):
                 img = img.view(B * N, C, H, W)
             if self.use_grid_mask:
                 img = self.grid_mask(img)
+            img.requires_grad = True
             img_feats = self.img_backbone(img)
         else:
             return None
@@ -158,7 +159,7 @@ class Detr3DCam(MVXTwoStageDetector):
             for bboxes, scores, labels in bbox_list
         ]
         return bbox_results
-    
+
     def simple_test(self, points, img_metas, img=None, rescale=False):
         """Test function without augmentaiton."""
         img_feats, pts_feats = self.extract_feat(

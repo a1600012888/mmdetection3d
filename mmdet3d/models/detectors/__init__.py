@@ -2,6 +2,7 @@ from .base import Base3DDetector
 from .centerpoint import CenterPoint
 from .dynamic_voxelnet import DynamicVoxelNet
 from .h3dnet import H3DNet
+from .fcos_mono3d import FCOSMono3D
 from .imvotenet import ImVoteNet
 from .mvx_faster_rcnn import DynamicMVXFasterRCNN, MVXFasterRCNN
 from .mvx_two_stage import MVXTwoStageDetector
@@ -28,5 +29,6 @@ __all__ = [
     'ImVoteNet',
     'DETR3D',
     'Distiller3D',
-    'Detr3DCam'
+    'Detr3DCam',
+    'FCOSMono3D',
 ]

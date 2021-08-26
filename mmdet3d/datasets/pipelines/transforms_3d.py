@@ -370,6 +370,9 @@ class GlobalRotScaleTrans(object):
                     noise_rotation, input_dict['points'])
                 input_dict['points'] = points
                 input_dict['pcd_rotation'] = rot_mat_T
+                rot_mat_T_np = np.eye(4)
+                rot_mat_T_np[:3, :3] = rot_mat_T.numpy()
+                input_dict['lidar2img'] = input_dict['lidar2img'] @ rot_mat_T_np
         # input_dict['points_instance'].rotate(noise_rotation)
 
     def _scale_bbox_points(self, input_dict):
@@ -392,7 +395,20 @@ class GlobalRotScaleTrans(object):
 
         for key in input_dict['bbox3d_fields']:
             input_dict[key].scale(scale)
+        
+        scale_eye = np.eye(4)
+        scale_eye[0, 0] *= scale
+        scale_eye[1, 1] *= scale
+        
+        lidar2imgs = []
+        for idx in range(len(input_dict['intrinsic'])):
 
+            intrinsic = input_dict['intrinsic'][idx]
+            extrinsic = input_dict['extrinsic'][idx]
+            lidar2img = (intrinsic * scale_eye) @ extrinsic
+            lidar2imgs.append(lidar2img)
+        input_dict['lidar2img'] = lidar2imgs
+        
     def _random_scale(self, input_dict):
         """Private function to randomly set the scale factor.
 
@@ -1119,9 +1135,9 @@ class Pad3D(object):
                 padded_img = [mmcv.impad_to_multiple(
                     img, self.size_divisor, pad_val=self.pad_val) for img in results[key]]
             results[key] = padded_img
-        results['pad_shape'] = [img.shape for img in padded_img]
-        results['pad_fixed_size'] = self.size
-        results['pad_size_divisor'] = self.size_divisor
+        results['img_shape'] = [img.shape for img in padded_img]
+        results['img_fixed_size'] = self.size
+        results['img_size_divisor'] = self.size_divisor
 
     def _pad_masks(self, results):
         """Pad masks according to ``results['pad_shape']``."""
@@ -1190,4 +1206,388 @@ class Normalize3D(object):
     def __repr__(self):
         repr_str = self.__class__.__name__
         repr_str += f'(mean={self.mean}, std={self.std}, to_rgb={self.to_rgb})'
+        return repr_str
+
+
+@PIPELINES.register_module()
+class RandomLRFlip(object):
+    """LRFlip the images. 
+   
+    """
+
+    def __init__(self, **kwargs):
+        pass
+
+    def __call__(self, input_dict):
+        for key in input_dict.get('img_fields', ['img']):
+            imgs = input_dict[key]
+            flip = []
+            for idx in range(len(imgs)):
+                if np.random.uniform() > 0.5:
+                    imgs[idx] = np.flip(imgs[idx], 1)
+                    flip.append(1.0)
+                else:
+                    flip.append(0.0)
+            input_dict[key] = imgs
+            input_dict[key+'_'+'flip'] = np.asarray(flip).astype('float32')
+        return input_dict
+
+    def __repr__(self):
+        """str: Return a string that describes the module."""
+        repr_str = self.__class__.__name__
+        return repr_str
+
+
+@PIPELINES.register_module()
+class RandomFlip3DCam(RandomFlip):
+    """Flip the points & bbox.
+
+    If the input dict contains the key "flip", then the flag will be used,
+    otherwise it will be randomly decided by a ratio specified in the init
+    method.
+
+    Args:
+        sync_2d (bool, optional): Whether to apply flip according to the 2D
+            images. If True, it will apply the same flip as that to 2D images.
+            If False, it will decide whether to flip randomly and independently
+            to that of 2D images. Defaults to True.
+        flip_ratio_bev_horizontal (float, optional): The flipping probability
+            in horizontal direction. Defaults to 0.0.
+        flip_ratio_bev_vertical (float, optional): The flipping probability
+            in vertical direction. Defaults to 0.0.
+    """
+
+    def __init__(self,
+                 sync_2d=True,
+                 flip_ratio_bev_horizontal=0.0,
+                 flip_ratio_bev_vertical=0.0,
+                 **kwargs):
+        super(RandomFlip3DCam, self).__init__(
+            flip_ratio=flip_ratio_bev_horizontal, **kwargs)
+        self.sync_2d = sync_2d
+        self.flip_ratio_bev_vertical = flip_ratio_bev_vertical
+        if flip_ratio_bev_horizontal is not None:
+            assert isinstance(
+                flip_ratio_bev_horizontal,
+                (int, float)) and 0 <= flip_ratio_bev_horizontal <= 1
+        if flip_ratio_bev_vertical is not None:
+            assert isinstance(
+                flip_ratio_bev_vertical,
+                (int, float)) and 0 <= flip_ratio_bev_vertical <= 1
+
+    def random_flip_data_3d(self, input_dict, direction='horizontal'):
+        """Flip 3D data randomly.
+
+        Args:
+            input_dict (dict): Result dict from loading pipeline.
+            direction (str): Flip direction. Default: horizontal.
+
+        Returns:
+            dict: Flipped results, 'points', 'bbox3d_fields' keys are \
+                updated in the result dict.
+        """
+        assert direction in ['horizontal', 'vertical']
+        if len(input_dict['bbox3d_fields']) == 0:  # test mode
+            input_dict['bbox3d_fields'].append('empty_box3d')
+            input_dict['empty_box3d'] = input_dict['box_type_3d'](
+                np.array([], dtype=np.float32))
+        assert len(input_dict['bbox3d_fields']) == 1
+        for key in input_dict['bbox3d_fields']:
+            if 'points' in input_dict:
+                input_dict['points'] = input_dict[key].flip(
+                    direction, points=input_dict['points'])
+            else:
+                input_dict[key].flip(direction)
+        if 'centers2d' in input_dict:
+            assert self.sync_2d is True and direction == 'horizontal', \
+                'Only support sync_2d=True and horizontal flip with images'
+            w = input_dict['img_shape'][1]
+            input_dict['centers2d'][..., 0] = \
+                w - input_dict['centers2d'][..., 0]
+
+    def flip_extrinsic(self, input_dict, direction='horizontal'):
+        lidar2img = input_dict['lidar2img'] # (6, 4, 4)
+        flip_mat = np.eye(4)
+        if direction == 'vertical':
+            flip_mat[0, 0] = -1
+        elif direction == 'horizontal':
+            flip_mat[1, 1] = -1
+        lidar2img = lidar2img @ flip_mat
+        input_dict['lidar2img'] = lidar2img
+
+    def __call__(self, input_dict):
+        """Call function to flip points, values in the ``bbox3d_fields`` and \
+        also flip 2D image and its annotations.
+
+        Args:
+            input_dict (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Flipped results, 'flip', 'flip_direction', \
+                'pcd_horizontal_flip' and 'pcd_vertical_flip' keys are added \
+                into result dict.
+        """
+        # do not filp 2D image and its annotations
+        # super(RandomFlip3D, self).__call__(input_dict)
+
+        if self.sync_2d:
+            input_dict['pcd_horizontal_flip'] = input_dict['flip']
+            input_dict['pcd_vertical_flip'] = False
+        else:
+            if 'pcd_horizontal_flip' not in input_dict:
+                flip_horizontal = True if np.random.rand(
+                ) < self.flip_ratio else False
+                input_dict['pcd_horizontal_flip'] = flip_horizontal
+            if 'pcd_vertical_flip' not in input_dict:
+                flip_vertical = True if np.random.rand(
+                ) < self.flip_ratio_bev_vertical else False
+                input_dict['pcd_vertical_flip'] = flip_vertical
+
+        if 'transformation_3d_flow' not in input_dict:
+            input_dict['transformation_3d_flow'] = []
+
+        if input_dict['pcd_horizontal_flip']:
+            self.random_flip_data_3d(input_dict, 'horizontal')
+            input_dict['transformation_3d_flow'].extend(['HF'])
+            self.flip_extrinsic(input_dict, 'horizontal')
+        if input_dict['pcd_vertical_flip']:
+            self.random_flip_data_3d(input_dict, 'vertical')
+            input_dict['transformation_3d_flow'].extend(['VF'])
+            self.flip_extrinsic(input_dict, 'vertical')
+        return input_dict
+
+    def __repr__(self):
+        """str: Return a string that describes the module."""
+        repr_str = self.__class__.__name__
+        repr_str += f'(sync_2d={self.sync_2d},'
+        repr_str += f' flip_ratio_bev_vertical={self.flip_ratio_bev_vertical})'
+        return repr_str
+
+
+@PIPELINES.register_module()
+class GlobalRotScaleTransCam(object):
+    """Apply global rotation, scaling and translation to a 3D scene.
+
+    Args:
+        rot_range (list[float]): Range of rotation angle.
+            Defaults to [-0.78539816, 0.78539816] (close to [-pi/4, pi/4]).
+        scale_ratio_range (list[float]): Range of scale ratio.
+            Defaults to [0.95, 1.05].
+        translation_std (list[float]): The standard deviation of ranslation
+            noise. This apply random translation to a scene by a noise, which
+            is sampled from a gaussian distribution whose standard deviation
+            is set by ``translation_std``. Defaults to [0, 0, 0]
+        shift_height (bool): Whether to shift height.
+            (the fourth dimension of indoor points) when scaling.
+            Defaults to False.
+    """
+
+    def __init__(self,
+                 rot_range=[-0.78539816, 0.78539816],
+                 scale_ratio_range=[1.0, 1.0],
+                 translation_std=[0, 0, 0],
+                 shift_height=False):
+        self.rot_range = rot_range
+        self.scale_ratio_range = scale_ratio_range
+        self.translation_std = translation_std
+        self.shift_height = shift_height
+
+    def _trans_bbox_points(self, input_dict):
+        """Private function to translate bounding boxes and points.
+
+        Args:
+            input_dict (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Results after translation, 'points', 'pcd_trans' \
+                and keys in input_dict['bbox3d_fields'] are updated \
+                in the result dict.
+        """
+        if not isinstance(self.translation_std, (list, tuple, np.ndarray)):
+            translation_std = [
+                self.translation_std, self.translation_std,
+                self.translation_std
+            ]
+        else:
+            translation_std = self.translation_std
+        translation_std = np.array(translation_std, dtype=np.float32)
+        trans_factor = np.random.normal(scale=translation_std, size=3).T
+
+        input_dict['points'].translate(trans_factor)
+        input_dict['pcd_trans'] = trans_factor
+        for key in input_dict['bbox3d_fields']:
+            input_dict[key].translate(trans_factor)
+
+    def _rot_bbox_points(self, input_dict):
+        """Private function to rotate bounding boxes and points.
+
+        Args:
+            input_dict (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Results after rotation, 'points', 'pcd_rotation' \
+                and keys in input_dict['bbox3d_fields'] are updated \
+                in the result dict.
+        """
+        rotation = self.rot_range
+        if not isinstance(rotation, list):
+            rotation = [-rotation, rotation]
+        noise_rotation = np.random.uniform(rotation[0], rotation[1])
+
+        for key in input_dict['bbox3d_fields']:
+            if len(input_dict[key].tensor) != 0:
+                points, rot_mat_T = input_dict[key].rotate(
+                    noise_rotation, input_dict['points'])
+                input_dict['points'] = points
+                input_dict['pcd_rotation'] = rot_mat_T
+        # input_dict['points_instance'].rotate(noise_rotation)
+
+    def _scale_bbox_points(self, input_dict):
+        """Private function to scale bounding boxes and points.
+
+        Args:
+            input_dict (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Results after scaling, 'points'and keys in \
+                input_dict['bbox3d_fields'] are updated in the result dict.
+        """
+        scale = input_dict['pcd_scale_factor']
+        points = input_dict['points']
+        points.scale(scale)
+        if self.shift_height:
+            assert 'height' in points.attribute_dims.keys()
+            points.tensor[:, points.attribute_dims['height']] *= scale
+        input_dict['points'] = points
+
+        for key in input_dict['bbox3d_fields']:
+            input_dict[key].scale(scale)
+
+    def _random_scale(self, input_dict):
+        """Private function to randomly set the scale factor.
+
+        Args:
+            input_dict (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Results after scaling, 'pcd_scale_factor' are updated \
+                in the result dict.
+        """
+        scale_factor = np.random.uniform(self.scale_ratio_range[0],
+                                         self.scale_ratio_range[1])
+        input_dict['pcd_scale_factor'] = scale_factor
+
+    def __call__(self, input_dict):
+        """Private function to rotate, scale and translate bounding boxes and \
+        points.
+
+        Args:
+            input_dict (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Results after scaling, 'points', 'pcd_rotation',
+                'pcd_scale_factor', 'pcd_trans' and keys in \
+                input_dict['bbox3d_fields'] are updated in the result dict.
+        """
+        if 'transformation_3d_flow' not in input_dict:
+            input_dict['transformation_3d_flow'] = []
+
+        self._rot_bbox_points(input_dict)
+
+        if 'pcd_scale_factor' not in input_dict:
+            self._random_scale(input_dict)
+        self._scale_bbox_points(input_dict)
+
+        self._trans_bbox_points(input_dict)
+
+        input_dict['transformation_3d_flow'].extend(['R', 'S', 'T'])
+        return input_dict
+
+    def __repr__(self):
+        """str: Return a string that describes the module."""
+        repr_str = self.__class__.__name__
+        repr_str += f'(rot_range={self.rot_range},'
+        repr_str += f' scale_ratio_range={self.scale_ratio_range},'
+        repr_str += f' translation_std={self.translation_std},'
+        repr_str += f' shift_height={self.shift_height})'
+        return repr_str
+
+
+@PIPELINES.register_module()
+class Clip3D(object):
+    """Clip the image
+    There are two padding modes: (1) pad to a fixed size and (2) pad to the
+    minimum size that is divisible by some number.
+    Added keys are "pad_shape", "pad_fixed_size", "pad_size_divisor",
+    Args:
+        size (tuple, optional): Fixed padding size.
+        size_divisor (int, optional): The divisor of padded size.
+        pad_val (float, optional): Padding value, 0 by default.
+    """
+
+    def __init__(self, size=None):
+        self.size = size
+
+    def __call__(self, results):
+        """Call function to pad images, masks, semantic segmentation maps.
+        Args:
+            results (dict): Result dict from loading pipeline.
+        Returns:
+            dict: Updated result dict.
+        """
+        for key in results.get('img_fields', ['img']):
+            result_img = [img[:self.size[0], :self.size[1], ...] for img in results[key]]
+            results[key] = result_img
+        results['img_shape'] = [img.shape for img in result_img]
+        results['img_fixed_size'] = self.size
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'(size={self.size}, '
+        return repr_str
+
+@PIPELINES.register_module()
+class RandomScaleImage3D(object):
+    """Random scale the image
+    There are two padding modes: (1) pad to a fixed size and (2) pad to the
+    minimum size that is divisible by some number.
+    Added keys are "pad_shape", "pad_fixed_size", "pad_size_divisor",
+    Args:
+        size (tuple, optional): Fixed padding size.
+        size_divisor (int, optional): The divisor of padded size.
+        pad_val (float, optional): Padding value, 0 by default.
+    """
+
+    def __init__(self, scales=(0.85, 1.15)):
+        self.scales = scales
+
+    def __call__(self, results):
+        """Call function to pad images, masks, semantic segmentation maps.
+        Args:
+            results (dict): Result dict from loading pipeline.
+        Returns:
+            dict: Updated result dict.
+        """
+        rand_scale = np.random.uniform(low=self.scales[0], high=self.scales[1])
+        img_shape = results['img_shape'][0]
+        y_size = int((img_shape[0] * rand_scale) // 32) * 32
+        x_size = int((img_shape[1] * rand_scale) // 32) * 32 
+        y_scale = y_size * 1.0 / img_shape[0]
+        x_scale = x_size * 1.0 / img_shape[1]
+        scale_factor = np.eye(4)
+        scale_factor[0, 0] *= x_scale
+        scale_factor[1, 1] *= y_scale
+        for key in results.get('img_fields', ['img']):
+            result_img = [mmcv.imresize(img, (x_size, y_size), return_scale=False) for img in results[key]]
+            results[key] = result_img
+            lidar2img = [scale_factor @ l2i for l2i in results['lidar2img']]
+            results['lidar2img'] = lidar2img
+
+        results['img_shape'] = [img.shape for img in result_img]
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'(size={self.size}, '
         return repr_str

@@ -115,28 +115,3 @@ class DETR3DCoder(BaseBBoxCoder):
         for i in range(batch_size):
             predictions_list.append(self.decode_single(all_cls_scores[i], all_bbox_preds[i]))
         return predictions_list
-    
-
-    def decode_all(self, preds_dicts):
-        """Decode bboxes.
-        Args:
-            all_cls_scores (Tensor): Outputs from the classification head, \
-                shape [nb_dec, bs, num_query, cls_out_channels]. Note \
-                cls_out_channels should includes background.
-            all_bbox_preds (Tensor): Sigmoid outputs from the regression \
-                head with normalized coordinate format (cx, cy, w, l, cz, h, rot_sine, rot_cosine, vx, vy). \
-                Shape [nb_dec, bs, num_query, 9].
-
-        Returns:
-            list[dict]: Decoded boxes.
-        """
-        
-        all_prediction_list = []
-        for all_cls_scores, all_bbox_preds in zip(preds_dicts['all_cls_scores'], preds_dicts['all_bbox_preds']):
-            batch_size = all_cls_scores.size()[0]
-            predictions_list = []
-            for i in range(batch_size):
-                predictions_list.append(self.decode_single(all_cls_scores[i], all_bbox_preds[i]))
-            
-            all_prediction_list.append(predictions_list)
-        return all_prediction_list

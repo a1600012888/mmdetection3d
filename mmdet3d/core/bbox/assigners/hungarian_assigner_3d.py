@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 from mmdet.core.bbox.builder import BBOX_ASSIGNERS
@@ -42,9 +43,11 @@ class HungarianAssigner3D(BaseAssigner):
     def __init__(self,
                  cls_cost=dict(type='ClassificationCost', weight=1.),
                  reg_cost=dict(type='BBoxL1Cost', weight=1.0),
-                 pc_range=None, **kwargs):
+                 iou_cost=dict(type='IoUCost', iou_mode='giou', weight=1.0),
+                 pc_range=None):
         self.cls_cost = build_match_cost(cls_cost)
         self.reg_cost = build_match_cost(reg_cost)
+        self.iou_cost = build_match_cost(iou_cost)
         self.pc_range = pc_range
 
     def assign(self,
@@ -109,16 +112,18 @@ class HungarianAssigner3D(BaseAssigner):
         reg_cost = self.reg_cost(bbox_pred[:, :8], normalized_gt_bboxes[:, :8])
         # regression iou cost, defaultly giou is used in official DETR.
         denormalized_bboxes = denormalize_bbox(bbox_pred, self.pc_range)
-        
+        iou_cost = self.iou_cost(denormalized_bboxes[:, :7], gt_bboxes[:, :7]) - 1
         # weighted sum of above three costs
-        cost = cls_cost + reg_cost
-        cost = torch.nan_to_num(cost, 10000.0)
+        cost = cls_cost + reg_cost + iou_cost
+
+        cost = torch.nan_to_num(cost)
 
         # 3. do Hungarian matching on CPU using linear_sum_assignment
         cost = cost.detach().cpu()
         if linear_sum_assignment is None:
             raise ImportError('Please run "pip install scipy" '
                               'to install scipy first.')
+        cost = np.nan_to_num(cost)
         matched_row_inds, matched_col_inds = linear_sum_assignment(cost)
         matched_row_inds = torch.from_numpy(matched_row_inds).to(
             bbox_pred.device)

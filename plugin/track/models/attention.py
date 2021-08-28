@@ -56,14 +56,12 @@ class Detr3DCamCrossAttenTrack(BaseModule):
                  embed_dims=256,
                  num_heads=8,
                  num_levels=4,
-                 num_points=5,
+                 num_points=1,
                  num_cams=6,
                  im2col_step=64,
                  pc_range=None,
                  dropout=0.1,
                  weight_dropout=0.0,
-                 use_dconv=False,
-                 use_level_cam_embed=False,
                  norm_cfg=None,
                  init_cfg=None):
         super(Detr3DCamCrossAttenTrack, self).__init__(init_cfg)
@@ -99,16 +97,9 @@ class Detr3DCamCrossAttenTrack(BaseModule):
         self.num_heads = num_heads
         self.num_points = num_points
         self.num_cams = num_cams
-        self.use_dconv = use_dconv
-        self.use_level_cam_embed = use_level_cam_embed
         self.attention_weights = nn.Linear(embed_dims,
                                            num_cams*num_levels*num_points)
         self.output_proj = nn.Linear(embed_dims, embed_dims)
-        if self.use_level_cam_embed:
-            self.level_embeds = nn.Parameter(
-                torch.Tensor(self.embed_dims, self.num_levels))
-            self.cam_embeds = nn.Parameter(
-                torch.Tensor(self.embed_dims, self.num_cams))
 
         self.pos_encoder = nn.Sequential(
             nn.Linear(3, self.embed_dims), 
@@ -125,10 +116,7 @@ class Detr3DCamCrossAttenTrack(BaseModule):
         """Default initialization for Parameters of Module."""
         constant_init(self.attention_weights, val=0., bias=0.)
         xavier_init(self.output_proj, distribution='uniform', bias=0.)
-        if self.use_level_cam_embed:
-            normal_(self.level_embeds)
-            normal_(self.cam_embeds)
-    
+        xavier_init(self.pos_encoder, distribution='uniform', bias=0.)
 
     def forward(self,
                 query,
@@ -156,7 +144,7 @@ class Detr3DCamCrossAttenTrack(BaseModule):
             key_pos (Tensor): The positional encoding for `key`. Default
                 None.
             reference_points (Tensor):  The normalized reference
-                points with shape (bs, num_query, 4),
+                points with shape (bs, num_query, 3),
                 all elements is range in [0, 1], top-left (0,0),
                 bottom-right (1, 1), including padding area.
                 or (N, Length_{query}, num_levels, 4), add
@@ -197,16 +185,9 @@ class Detr3DCamCrossAttenTrack(BaseModule):
         output = torch.nan_to_num(output)
         mask = torch.nan_to_num(mask)
 
-        if self.use_level_cam_embed:
-            level_embeds = self.level_embeds.view(1, self.embed_dims, 1, 1, 1, self.num_levels)
-            cam_embeds = self.cam_embeds.view(1, self.embed_dims, 1, self.num_cams, 1, 1)
-            output = output + level_embeds + cam_embeds
-
         # attention_weights = attention_weights.view(bs, 1, num_query, self.num_cams * self.num_levels)
         # attention_weights = attention_weights.softmax(-1)
         # attention_weights = attention_weights.view(bs, 1, num_query, self.num_cams, self.num_levels)
-
-        # TODO: use if else to switch between dynamic conv and weighted sum 
 
         attention_weights = self.weight_dropout(attention_weights.sigmoid()) * mask
         output = output * attention_weights

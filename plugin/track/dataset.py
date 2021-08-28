@@ -514,6 +514,8 @@ class NuScenesTrackDataset(Dataset):
 
         print('Start to convert detection format...')
         for sample_id, det in enumerate(mmcv.track_iter_progress(results)):
+            if det is None:
+                continue
             annos = []
             boxes = output_to_nusc_box(det)
             sample_token = self.data_infos[sample_id]['token']
@@ -592,12 +594,12 @@ class NuScenesTrackDataset(Dataset):
         from nuscenes.eval.detection.evaluate import NuScenesEval
 
         output_dir = osp.join(*osp.split(result_path)[:-1])
-        
+
         eval_set_map = {
             'v1.0-mini': 'mini_val',
             'v1.0-trainval': 'val',
         }
-        from nuscenes.eval.tracking.evaluate import TrackingEval 
+        from nuscenes.eval.tracking.evaluate import TrackingEval
         from nuscenes.eval.common.config import config_factory as track_configs
 
         cfg = track_configs("tracking_nips_2019")
@@ -651,7 +653,7 @@ class NuScenesTrackDataset(Dataset):
             tmp_dir = None
 
         result_files = self._format_bbox(results, jsonfile_prefix)
-        
+
         return result_files, tmp_dir
 
     def evaluate(self,

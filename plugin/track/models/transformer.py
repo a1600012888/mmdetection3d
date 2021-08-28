@@ -1,23 +1,9 @@
-import math
-
-import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from mmcv.ops.multi_scale_deform_attn import (
-    MultiScaleDeformableAttnFunction, multi_scale_deformable_attn_pytorch)
-from mmcv.cnn import build_activation_layer, build_norm_layer, xavier_init, constant_init
-from mmcv.cnn.bricks.registry import (TRANSFORMER_LAYER, ATTENTION,
-                                      TRANSFORMER_LAYER_SEQUENCE)
-from mmcv.cnn.bricks.transformer import (BaseTransformerLayer,
-                                         MultiScaleDeformableAttention,
-                                         TransformerLayerSequence,
-                                         build_transformer_layer_sequence)
+from mmcv.cnn.bricks.transformer import build_transformer_layer_sequence
 from mmcv.runner.base_module import BaseModule
-from torch.nn.init import normal_
 
 from mmdet.models.utils.builder import TRANSFORMER
-from mmdet.models.utils import Transformer
 
 
 @TRANSFORMER.register_module()
@@ -61,9 +47,6 @@ class Detr3DCamTransformerPlus(BaseModule):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-        for m in self.modules():
-            if isinstance(m, MultiScaleDeformableAttention):
-                m.init_weight()
         # xavier_init(self.reference_points, distribution='uniform', bias=0.)
         # normal_(self.level_embeds)
         # normal_(self.cam_embeds)
@@ -84,6 +67,7 @@ class Detr3DCamTransformerPlus(BaseModule):
                 query_feat and query_positional_encoding.
             reference_points (Tensor): The corresponding 3d ref points
                 for the query with shape (num_query, 3)
+                value is in inverse sigmoid space
             reg_branches (obj:`nn.ModuleList`): Regression heads for
                 feature maps from each decoder layer. Only would
                 be passed when

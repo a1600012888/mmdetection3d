@@ -35,10 +35,10 @@ model = dict(
         pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
         max_num=300,
         num_classes=7),
-    score_thresh=0.4,
-    filter_score_thresh=0.3,
+    score_thresh=0.3,
+    filter_score_thresh=0.2,
     qim_args=dict(
-        merger_dropout=0, update_query_pos=False,
+        merger_dropout=0, update_query_pos=True,
         fp_ratio=0.3, random_drop=0.1),
     img_backbone=dict(
         type='ResNet',
@@ -61,7 +61,7 @@ model = dict(
         assigner=dict(
             type='HungarianAssigner3DTrack',
             cls_cost=dict(type='FocalLossCost', weight=2.0),
-            reg_cost=dict(type='BBox3DL1Cost', weight=0.1),
+            reg_cost=dict(type='BBox3DL1Cost', weight=0.25),
             pc_range=point_cloud_range),
         loss_cls=dict(
             type='FocalLoss',
@@ -69,7 +69,7 @@ model = dict(
             gamma=2.0,
             alpha=0.25,
             loss_weight=2.0),
-        loss_bbox=dict(type='L1Loss', loss_weight=0.1),
+        loss_bbox=dict(type='L1Loss', loss_weight=0.25),
     ),
     img_neck=dict(
         type='FPN',
@@ -105,8 +105,6 @@ model = dict(
                         dict(
                             type='Detr3DCamCrossAttenTrack',
                             pc_range=point_cloud_range,
-                            use_dconv=False,
-                            use_level_cam_embed=False,
                             num_points=1,
                             embed_dims=256)
                     ],
@@ -242,10 +240,11 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     step=[8, 11])
 total_epochs = 12
-evaluation = dict(interval=1)
+evaluation = dict(interval=12)
 
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 
-find_unused_parameters = False
+find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'
-load_from = '/home/ubuntu/projects/detr_det/mmdetection3d/work_dirs/track/baseline_fix_bbox0.1/latest.pth'
+load_from = 'work_dirs/models/backbone_neck.pth'
+fp16 = dict(loss_scale='dynamic')

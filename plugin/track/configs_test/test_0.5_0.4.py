@@ -35,8 +35,8 @@ model = dict(
         pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
         max_num=300,
         num_classes=7),
-    score_thresh=0.3,
-    filter_score_thresh=0.2,
+    score_thresh=0.5,
+    filter_score_thresh=0.4,
     qim_args=dict(
         merger_dropout=0, update_query_pos=True,
         fp_ratio=0.3, random_drop=0.1),
@@ -112,7 +112,7 @@ model = dict(
                     ffn_dropout=0.1,
                     operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
                                      'ffn', 'norm')))),
-        pc_range=point_cloud_range, 
+        pc_range=point_cloud_range,
         positional_encoding=dict(
             type='SinePositionalEncoding',
             num_feats=128,
@@ -246,4 +246,4 @@ runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'
-load_from = 'work_dirs/models/backbone_neck.pth'
+load_from = '/home/ubuntu/projects/detr_det/mmdetection3d/work_dirs/track/v2/bbox0.25/latest.pth'

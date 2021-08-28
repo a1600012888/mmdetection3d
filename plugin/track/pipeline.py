@@ -6,6 +6,7 @@ from mmdet3d.core.points import BasePoints
 from mmdet.datasets.builder import PIPELINES
 from mmdet.datasets.pipelines import to_tensor
 from mmdet3d.datasets.pipelines import DefaultFormatBundle
+import mmcv
 
 
 @PIPELINES.register_module()
@@ -133,4 +134,54 @@ class InstanceRangeFilter(object):
         """str: Return a string that describes the module."""
         repr_str = self.__class__.__name__
         repr_str += f'(point_cloud_range={self.pcd_range.tolist()})'
+        return repr_str
+
+
+@PIPELINES.register_module()
+class ScaleMultiViewImage3D(object):
+    """Random scale the image
+    There are two padding modes: (1) pad to a fixed size and (2) pad to the
+    minimum size that is divisible by some number.
+    Added keys are "pad_shape", "pad_fixed_size", "pad_size_divisor",
+    Args:
+        size (tuple, optional): Fixed padding size.
+        size_divisor (int, optional): The divisor of padded size.
+        pad_val (float, optional): Padding value, 0 by default.
+    """
+
+    def __init__(self, scale=0.75):
+        self.scale = scale
+
+    def __call__(self, results):
+        """Call function to pad images, masks, semantic segmentation maps.
+        Args:
+            results (dict): Result dict from loading pipeline.
+            'img': list of imgs
+            'lidar2img' (list of 4x4 array)
+            'intrinsic' (list of 4x4 array)
+            'extrinsic' (list of 4x4 array)
+        Returns:
+            dict: Updated result dict.
+        """
+        rand_scale = self.scale
+        img_shape = results['img_shape'][0]
+        y_size = int((img_shape[0] * rand_scale) // 32) * 32
+        x_size = int((img_shape[1] * rand_scale) // 32) * 32 
+        y_scale = y_size * 1.0 / img_shape[0]
+        x_scale = x_size * 1.0 / img_shape[1]
+        scale_factor = np.eye(4)
+        scale_factor[0, 0] *= x_scale
+        scale_factor[1, 1] *= y_scale
+        for key in results.get('img_fields', ['img']):
+            result_img = [mmcv.imresize(img, (x_size, y_size), return_scale=False) for img in results[key]]
+            results[key] = result_img
+            lidar2img = [scale_factor @ l2i for l2i in results['lidar2img']]
+            results['lidar2img'] = lidar2img
+
+        results['img_shape'] = [img.shape for img in result_img]
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'(size={self.size}, '
         return repr_str

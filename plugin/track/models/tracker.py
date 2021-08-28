@@ -8,9 +8,11 @@ from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from mmdet3d.models.utils.grid import GridMask
 from mmdet3d.core.bbox.coders import build_bbox_coder
 from ..structures import Instances
-from .qim import QueryInteractionModule, EmptyQueryInteractionModule
+from .qim import build_qim
+from .memory_bank import build_memory_bank
 from mmdet.models import build_loss
 from copy import deepcopy
+from mmcv.runner import force_fp32, auto_fp16
 from mmdet3d.core.bbox.util import normalize_bbox, denormalize_bbox
 
 
@@ -40,7 +42,7 @@ class RuntimeTrackerBase(object):
                     # TODO: remove it by following functions
                     # Then this track will be removed by TrackEmbeddingLayer.
                     track_instances.obj_idxes[i] = -1
-    
+
     def update_fix_label(self, track_instances: Instances, old_class_scores):
         track_instances.disappear_time[track_instances.scores >= self.score_thresh] = 0
         for i in range(len(track_instances)):
@@ -79,8 +81,15 @@ class Detr3DCamTracker(MVXTwoStageDetector):
                     max_num=300,
                     num_classes=7),
                  qim_args=dict(
+                     qim_type='QIMBase',
                      merger_dropout=0, update_query_pos=False,
                      fp_ratio=0.3, random_drop=0.1),
+                 mem_cfg=dict(
+                     memory_bank_type='MemoryBank',
+                     memory_bank_score_thresh=0.0,
+                     memory_bank_len=4,
+                 ),
+                 fix_feats=False,
                  score_thresh=0.2,
                  filter_score_thresh=0.1,
                  use_grid_mask=False,
@@ -114,6 +123,10 @@ class Detr3DCamTracker(MVXTwoStageDetector):
 
         self.embed_dims = embed_dims
         self.num_query = num_query
+        self.fix_feats = fix_feats
+        if self.fix_feats:
+            self.img_backbone.eval()
+            self.img_neck.eval()
         self.reference_points = nn.Linear(self.embed_dims, 3)
         self.query_embedding = nn.Embedding(self.num_query,
                                             self.embed_dims * 2)
@@ -124,14 +137,20 @@ class Detr3DCamTracker(MVXTwoStageDetector):
             filter_score_thresh=filter_score_thresh,
             miss_tolerance=5)
 
-        # self.query_interact = QueryInteractionModule(
-        self.query_interact = EmptyQueryInteractionModule(
+        self.query_interact = build_qim(
             qim_args,
             dim_in=embed_dims,
             hidden_dim=embed_dims,
             dim_out=embed_dims,
         )
 
+        self.memory_bank = build_memory_bank(
+            args=mem_cfg,
+            dim_in=embed_dims,
+            hidden_dim=embed_dims,
+            dim_out=embed_dims,
+            )
+        self.mem_bank_len = 0 if self.memory_bank is None else self.memory_bank.max_his_length
         self.criterion = build_loss(loss_cfg)
         self.test_track_instances = None
 
@@ -177,10 +196,14 @@ class Detr3DCamTracker(MVXTwoStageDetector):
             img_feats_reshaped.append(img_feat.view(B, int(BN / B), C, H, W))
         return img_feats_reshaped
 
+    @auto_fp16(apply_to=('img'), out_fp32=True)
     def extract_feat(self, points, img, img_metas):
         """Extract features from images and points."""
-        #with torch.no_grad():
-        img_feats = self.extract_img_feat(img, img_metas)
+        if self.fix_feats:
+            with torch.no_grad():
+                img_feats = self.extract_img_feat(img, img_metas)
+        else:
+            img_feats = self.extract_img_feat(img, img_metas)
         return (img_feats, None)
 
     def _targets_to_instances(self, gt_bboxes_3d=None,
@@ -256,7 +279,7 @@ class Detr3DCamTracker(MVXTwoStageDetector):
         track_instances.save_period = deepcopy(tgt_instances.save_period)
         return track_instances.to(self.query_embedding.weight.device)
 
-    # @auto_fp16(apply_to=('img', 'points'))
+    @force_fp32(apply_to=('img', 'points'))
     def forward(self, return_loss=True, **kwargs):
         """Calls either forward_train or forward_test depending on whether
         return_loss=True.
@@ -273,6 +296,7 @@ class Detr3DCamTracker(MVXTwoStageDetector):
         else:
             return self.forward_test(**kwargs)
 
+    @force_fp32(apply_to=('img', 'points'))
     def _forward_single(self, points, img, img_metas, track_instances):
         '''
         Warnning: Only Support BS=1
@@ -281,7 +305,7 @@ class Detr3DCamTracker(MVXTwoStageDetector):
         B, num_cam, _, H, W = img.shape
         img_feats, pts_feats = self.extract_feat(points, img=img,
                                                  img_metas=img_metas)
-        img_feats = [a.clone() for a in img_feats]
+        # img_feats = [a.clone() for a in img_feats]
 
         # output_classes: [num_dec, B, num_query, num_classes]
         # query_feats: [B, num_query, embed_dim]
@@ -296,53 +320,41 @@ class Detr3DCamTracker(MVXTwoStageDetector):
                'ref_pts': last_ref_pts}
 
         with torch.no_grad():
-            if self.training:
-                track_scores = output_classes[-1, 0, :].sigmoid().max(dim=-1).values
-            else:
-                # TODO: Why no max?
-                track_scores = output_classes[-1, 0, :, 0].sigmoid()
+            track_scores = output_classes[-1, 0, :].sigmoid().max(dim=-1).values
 
         # Step-1 Update track instances with current prediction
         # [nb_dec, bs, num_query, xxx]
         nb_dec = output_classes.size(0)
 
-        if self.training:
-            # the track id will be assigned by the mather.
-            track_instances_list = [self._copy_tracks_for_loss(track_instances) for i in range(nb_dec-1)]
-            track_instances.output_embedding = query_feats[0]  # [300, feat_dim]
-            track_instances.ref_pts = last_ref_pts[0]
-            track_instances.query = track_instances.query
+        # the track id will be assigned by the mather.
+        track_instances_list = [self._copy_tracks_for_loss(track_instances) for i in range(nb_dec-1)]
+        track_instances.output_embedding = query_feats[0]  # [300, feat_dim]
+        track_instances.ref_pts = last_ref_pts[0]
+        track_instances.query = track_instances.query
 
-            track_instances_list.append(track_instances)
-            for i in range(nb_dec):
-                track_instances = track_instances_list[i]
-                #track_scores = output_classes[i, 0, :].sigmoid().max(dim=-1).values
+        # track_instances.query = torch.cat((track_instances.query[:, :self.embed_dims // 2],
+        #   query_feats[0]), dim=1)
 
-                track_instances.scores = track_scores
-                # track_instances.track_scores = track_scores  # [300]
-                track_instances.pred_logits = output_classes[i, 0]  # [300, num_cls]
-                track_instances.pred_boxes = output_coords[i, 0]  # [300, box_dim]
+        track_instances_list.append(track_instances)
+        for i in range(nb_dec):
+            track_instances = track_instances_list[i]
+            #track_scores = output_classes[i, 0, :].sigmoid().max(dim=-1).values
 
-                out['track_instances'] = track_instances
-                track_instances = self.criterion.match_for_single_frame(
-                    out, i, if_step=(i == (nb_dec - 1)))
-        else:
-            # each track will be assigned an unique global id by the track base.
+            # no loss for this term?
             track_instances.scores = track_scores
-            # track_instances.track_scores = track_scores  # [300]
-            track_instances.pred_logits = output_classes[-1, 0]  # [300, num_cls]
-            track_instances.pred_boxes = output_coords[-1, 0]  # [300, box_dim]
-            track_instances.output_embedding = query_feats[0]  # [300, feat_dim]
-            track_instances.ref_pts = last_ref_pts[0]
+            track_instances.pred_logits = output_classes[i, 0]  # [300, num_cls]
+            track_instances.pred_boxes = output_coords[i, 0]  # [300, box_dim]
 
-            self.track_base.update(track_instances)
+            out['track_instances'] = track_instances
+            track_instances = self.criterion.match_for_single_frame(
+                out, i, if_step=(i == (nb_dec - 1)))
 
+        # TODO calc_loss_for_track_scores
         if self.memory_bank is not None:
             track_instances = self.memory_bank(track_instances)
             # track_instances.track_scores = track_instances.track_scores[..., 0]
             # track_instances.scores = track_instances.track_scores.sigmoid()
-            if self.training:
-                self.criterion.calc_loss_for_track_scores(track_instances)
+            # self.criterion.calc_loss_for_track_scores(track_instances)
 
         # Step-2 Update track instances using matcher
 
@@ -399,15 +411,13 @@ class Detr3DCamTracker(MVXTwoStageDetector):
             gt_instances.obj_ids = instance_inds[0][i]
             gt_instances_list.append(gt_instances)
 
-        if self.training:
-            # TODO init criterion
-            self.criterion.initialize_for_single_clip(gt_instances_list)
+        # TODO init criterion
+        self.criterion.initialize_for_single_clip(gt_instances_list)
 
         outputs = {
             'pred_logits': [],
             'pred_boxes': [],
         }
-
         # for bs 1
         lidar2img = img_metas[0]['lidar2img']  # [T, num_cam]
         for i in range(num_frame):
@@ -420,13 +430,8 @@ class Detr3DCamTracker(MVXTwoStageDetector):
             frame_res = self._forward_single(points_single, img_single,
                                              img_metas_single, track_instances)
             track_instances = frame_res['track_instances']
-            outputs['pred_logits'].append(frame_res['pred_logits'])
-            outputs['pred_boxes'].append(frame_res['pred_boxes'])
 
-        if not self.training:
-            outputs['track_instances'] = track_instances
-        else:
-            outputs = self.criterion.losses_dict
+        outputs = self.criterion.losses_dict
         return outputs
 
     def _inference_single(self, points, img, img_metas, track_instances):
@@ -460,15 +465,14 @@ class Detr3DCamTracker(MVXTwoStageDetector):
 
         # each track will be assigned an unique global id by the track base.
         track_instances.scores = track_scores
-        old_class_scores = track_instances.pred_logits
         # track_instances.track_scores = track_scores  # [300]
         track_instances.pred_logits = output_classes[-1, 0]  # [300, num_cls]
         track_instances.pred_boxes = output_coords[-1, 0]  # [300, box_dim]
         track_instances.output_embedding = query_feats[0]  # [300, feat_dim]
         track_instances.ref_pts = last_ref_pts[0]
 
-        #self.track_base.update(track_instances)
-        self.track_base.update_fix_label(track_instances, old_class_scores)
+        self.track_base.update(track_instances)
+        #self.track_base.update_fix_label(track_instances, old_class_scores)
 
         if self.memory_bank is not None:
             track_instances = self.memory_bank(track_instances)
@@ -482,15 +486,13 @@ class Detr3DCamTracker(MVXTwoStageDetector):
         tmp['track_instances'] = track_instances
         out_track_instances = self.query_interact(tmp)
         out['track_instances'] = out_track_instances
-
-        # out['post_results'] = self._post_track(out)
         return out
 
     def forward_test(self,
                      points=None,
                      img=None,
                      img_metas=None,
-                     timestamp=1e6, 
+                     timestamp=1e6,
                      **kwargs,
                      ):
         """Forward test function.
@@ -522,17 +524,12 @@ class Detr3DCamTracker(MVXTwoStageDetector):
             track_instances = self._generate_empty_tracks()
             self.test_track_instances = track_instances
             self.timestamp = timestamp[0]
-        
-        if timestamp[0] - self.timestamp > 1:
+        # TODO: use scene tokens?
+        if timestamp[0] - self.timestamp > 10:
             track_instances = self._generate_empty_tracks()
         else:
             track_instances = self.test_track_instances
         self.timestamp = timestamp[-1]
-        
-        outputs = {
-            'pred_logits': [],
-            'pred_boxes': [],
-        }
 
         # for bs 1;
         lidar2img = img_metas[0]['lidar2img']  # [T, num_cam]
@@ -547,14 +544,10 @@ class Detr3DCamTracker(MVXTwoStageDetector):
                                                img_metas_single,
                                                track_instances)
             track_instances = frame_res['track_instances']
-            outputs['pred_logits'].append(frame_res['pred_logits'])
-            outputs['pred_boxes'].append(frame_res['pred_boxes'])
-        
-        outputs['track_instances'] = track_instances
+
         active_instances = self.query_interact._select_active_tracks(
             dict(track_instances=track_instances))
-        outputs['active_instances'] = active_instances
-        self.test_track_instances = outputs['track_instances']
+        self.test_track_instances = track_instances
 
         results = self._active_instances2results(active_instances, img_metas)
         return results
@@ -563,12 +556,12 @@ class Detr3DCamTracker(MVXTwoStageDetector):
         '''
         Outs:
         active_instances. keys:
-        - 'pred_logits': 
+        - 'pred_logits':
         - 'pred_boxes': normalized bboxes
         - 'scores'
-        - 'obj_idxes' 
+        - 'obj_idxes'
         out_dict. keys:
-        
+
             - boxes_3d (torch.Tensor): 3D boxes.
             - scores (torch.Tensor): Prediction scores.
             - labels_3d (torch.Tensor): Box labels.
@@ -579,14 +572,16 @@ class Detr3DCamTracker(MVXTwoStageDetector):
         # filter out sleep querys
         active_idxes = (active_instances.scores >= self.track_base.filter_score_thresh)
         active_instances = active_instances[active_idxes]
+        if active_instances.pred_logits.numel() == 0:
+            return [None]
         bbox_dict = dict(
             cls_scores=active_instances.pred_logits,
             bbox_preds=active_instances.pred_boxes,
             track_scores=active_instances.scores,
-            obj_idxes=active_instances.obj_idxes, 
+            obj_idxes=active_instances.obj_idxes,
         )
         bboxes_dict = self.bbox_coder.decode(bbox_dict)[0]
-        
+
         bboxes = bboxes_dict['bboxes']
         bboxes[:, 2] = bboxes[:, 2] - bboxes[:, 5] * 0.5
         bboxes = img_metas[0]['box_type_3d'][0](bboxes, 9)
@@ -603,9 +598,6 @@ class Detr3DCamTracker(MVXTwoStageDetector):
             track_ids=obj_idxes.cpu(),
         )
 
-        #print(active_instances.pred_logits.shape, active_instances.pred_boxes.shape, 
-        #    scores.shape, labels.shape, track_scores.shape, obj_idxes.shape)
-        
         return [result_dict]
 
     def simple_test_pts(self, x, img_metas, rescale=False):

@@ -3,18 +3,14 @@ import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mmcv.cnn import Linear, bias_init_with_prob, constant_init
+from mmcv.cnn import Linear
 from mmcv.runner import force_fp32
                         
-from mmdet.core import (multi_apply, build_assigner, build_sampler, 
-                        multi_apply, reduce_mean)
 from mmdet.models.utils.transformer import inverse_sigmoid
-from mmdet.models import HEADS, build_loss
-from mmdet.models.dense_heads import DeformableDETRHead, DETRHead
-from mmdet3d.core.bbox.util import normalize_bbox, denormalize_bbox
+from mmdet.models import HEADS
 
-from mmcv.cnn import Conv2d, Linear, build_activation_layer
-from mmcv.cnn.bricks.transformer import FFN, build_positional_encoding
+from mmcv.cnn import Linear, build_activation_layer
+from mmcv.cnn.bricks.transformer import build_positional_encoding
 from mmdet.models.utils import build_transformer
 
 
@@ -41,7 +37,7 @@ class DeformableDETR3DCamHeadTrack(nn.Module):
                      num_feats=128,
                      normalize=True,
                      offset=-0.5),
-                 with_box_refine=False,
+                 with_box_refine=True,
                  num_cls_fcs=2,
                  test_cfg=dict(max_per_img=100),
                  init_cfg=None,
@@ -54,10 +50,6 @@ class DeformableDETR3DCamHeadTrack(nn.Module):
         code weights: weights the bbox L1 loss
         """
         super(DeformableDETR3DCamHeadTrack, self).__init__()
-
-        # DETR sampling=False, so use PseudoSampler
-        sampler_cfg = dict(type='PseudoSampler')
-        self.sampler = build_sampler(sampler_cfg, context=self)
 
         self.with_box_refine = with_box_refine
         
@@ -130,9 +122,14 @@ class DeformableDETR3DCamHeadTrack(nn.Module):
     def forward(self, mlvl_feats, query_embeds, ref_points, img_metas):
         """Forward function.
         Args:
-            mlvl_feats (tuple[Tensor]): Features from the upstream
+            mlvl_feats (tuple[Tensor]): List of Features from the upstream
                 network, each is a 5D-tensor with shape
                 (B, N, C, H, W).
+            query_embeds (Tensor):  pos_embed and feature for querys of shape
+                (num_query, embed_dim*2)
+            ref_points (Tensor):  3d reference points associated with each query
+                shape (num_query, 3)
+                value is in inevrse sigmoid space
         Returns:
             all_cls_scores (Tensor): Outputs from the classification head, \
                 shape [nb_dec, bs, num_query, cls_out_channels]. Note \
@@ -215,6 +212,9 @@ class DeformableDETR3DCamHeadTrack(nn.Module):
         outputs_classes = torch.stack(outputs_classes)
         outputs_coords = torch.stack(outputs_coords)
         # [bs, num_query, embed_dim]
+        # change to inverse sigmoid space
+        last_ref_points = inverse_sigmoid(last_ref_points)
+        
         last_query_feats = hs[-1]
         
         return outputs_classes, outputs_coords, \

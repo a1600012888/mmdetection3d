@@ -330,7 +330,6 @@ class Detr3DCamTracker(MVXTwoStageDetector):
         track_instances_list = [self._copy_tracks_for_loss(track_instances) for i in range(nb_dec-1)]
         track_instances.output_embedding = query_feats[0]  # [300, feat_dim]
         track_instances.ref_pts = last_ref_pts[0]
-        track_instances.query = track_instances.query
 
         # track_instances.query = torch.cat((track_instances.query[:, :self.embed_dims // 2],
         #   query_feats[0]), dim=1)
@@ -414,10 +413,6 @@ class Detr3DCamTracker(MVXTwoStageDetector):
         # TODO init criterion
         self.criterion.initialize_for_single_clip(gt_instances_list)
 
-        outputs = {
-            'pred_logits': [],
-            'pred_boxes': [],
-        }
         # for bs 1
         lidar2img = img_metas[0]['lidar2img']  # [T, num_cam]
         for i in range(num_frame):

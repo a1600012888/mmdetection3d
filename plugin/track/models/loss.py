@@ -212,8 +212,8 @@ class ClipMatcher(nn.Module):
         # The matched gt for disappear track query is set -1.
         labels = []
         for gt_per_img, (_, J) in zip(gt_instances, indices):
-            labels_per_img = torch.ones_like(J)
-            # set labels of track-appear slots to 0.
+            labels_per_img = torch.ones_like(J) * self.num_classes
+            # set labels of track-appear slots to num_classes
             if len(gt_per_img) > 0:
                 labels_per_img[J != -1] = gt_per_img.labels[J[J != -1]]
             labels.append(labels_per_img)
@@ -223,7 +223,7 @@ class ClipMatcher(nn.Module):
         target_classes[idx] = target_classes_o
         label_weights = torch.ones_like(target_classes)
         # float tensor
-        avg_factor = target_classes_o.numel()  # pos + neg
+        avg_factor = target_classes_o.numel()  # pos + mathced gt for disapper track
         avg_factor = reduce_mean(
                 src_logits.new_tensor([avg_factor]))
         loss_ce = self.loss_cls(src_logits.flatten(0, 1), target_classes.flatten(0),

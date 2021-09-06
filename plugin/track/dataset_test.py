@@ -15,7 +15,7 @@ import torch
 
 
 @DATASETS.register_module()
-class NuScenesTrackDataset(Dataset):
+class NuScenesTrackTestDataset(Dataset):
     r"""NuScenes Dataset.
 
     This class serves as the API for experiments on the NuScenes Dataset.
@@ -100,8 +100,8 @@ class NuScenesTrackDataset(Dataset):
         'vehicle.parked',
         'vehicle.stopped',
     ]
-    CLASSES = ['car', 'truck', 'bus', 'trailer',
-               'motorcycle', 'bicycle', 'pedestrian']
+    CLASSES = ('car', 'truck', 'trailer', 'bus',
+               'bicycle', 'motorcycle', 'pedestrian')
 
     def __init__(self,
                  ann_file,
@@ -239,7 +239,7 @@ class NuScenesTrackDataset(Dataset):
         self.metadata = data['metadata']
         self.version = self.metadata['version']
         if not self.test_mode:
-            return data_infos
+            return data_infos[:10]
         return data_infos
 
     def get_data_info(self, index):
@@ -538,14 +538,14 @@ class NuScenesTrackDataset(Dataset):
                     elif name in ['bicycle', 'motorcycle']:
                         attr = 'cycle.with_rider'
                     else:
-                        attr = NuScenesTrackDataset.DefaultAttribute[name]
+                        attr = NuScenesTrackTestDataset.DefaultAttribute[name]
                 else:
                     if name in ['pedestrian']:
                         attr = 'pedestrian.standing'
                     elif name in ['bus']:
                         attr = 'vehicle.stopped'
                     else:
-                        attr = NuScenesTrackDataset.DefaultAttribute[name]
+                        attr = NuScenesTrackTestDataset.DefaultAttribute[name]
 
                 nusc_anno = dict(
                     sample_token=sample_token,
@@ -856,7 +856,7 @@ def _test():
 
     img_norm_cfg = dict(
         mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
-    dataset_type = 'NuScenesTrackDataset'
+    dataset_type = 'NuScenesTrackTestDataset'
     data_root = 'data/nuscenes/'
     class_names = [
         'car', 'truck', 'bus', 'trailer',

@@ -33,13 +33,25 @@ model = dict(
         type='DETRTrack3DCoder',
         post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
         pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
-        max_num=300,
+        max_num=50,
         num_classes=7),
+    fix_feats=False,
+    score_thresh=0.4,
+    filter_score_thresh=0.35,
+    qim_args=dict(
+        qim_type='QIMBase',
+        merger_dropout=0, update_query_pos=True,
+        fp_ratio=0.1, random_drop=0.1),
+    mem_cfg=dict(
+        memory_bank_type='MemoryBank',
+        memory_bank_score_thresh=0.0,
+        memory_bank_len=4,
+    ),
     img_backbone=dict(
         type='ResNet',
         with_cp=False,
         #with_cp=True,
-        pretrained='open-mmlab://detectron2/resnet50_caffe',
+        #pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -57,7 +69,7 @@ model = dict(
             type='HungarianAssigner3DTrack',
             cls_cost=dict(type='FocalLossCost', weight=2.0),
             reg_cost=dict(type='BBox3DL1Cost', weight=0.25),
-            pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]),
+            pc_range=point_cloud_range),
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,
@@ -100,8 +112,6 @@ model = dict(
                         dict(
                             type='Detr3DCamCrossAttenTrack',
                             pc_range=point_cloud_range,
-                            use_dconv=False,
-                            use_level_cam_embed=False,
                             num_points=1,
                             embed_dims=256)
                     ],
@@ -109,13 +119,7 @@ model = dict(
                     ffn_dropout=0.1,
                     operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
                                      'ffn', 'norm')))),
-        bbox_coder=dict(
-            type='DETR3DCoder',
-            post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
-            pc_range=point_cloud_range,
-            max_num=300,
-            voxel_size=voxel_size,
-            num_classes=10),
+        pc_range=point_cloud_range,
         positional_encoding=dict(
             type='SinePositionalEncoding',
             num_feats=128,
@@ -152,7 +156,7 @@ model = dict(
         post_max_size=83,
         nms_thr=0.2))
 
-dataset_type = 'NuScenesTrackDataset'
+dataset_type = 'NuScenesTrackTestDataset'
 data_root = 'data/nuscenes/'
 
 file_client_args = dict(backend='disk')
@@ -165,13 +169,6 @@ train_pipeline = [
         use_dim=5,
         file_client_args=file_client_args),
     dict(type='LoadMultiViewImageFromFiles'),
-    dict(
-        type='LoadPointsFromMultiSweeps',
-        sweeps_num=1,
-        use_dim=[0, 1, 2, 3, 4],
-        file_client_args=file_client_args,
-        pad_empty_sweeps=True,
-        remove_close=True),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
     dict(type='InstanceRangeFilter', point_cloud_range=point_cloud_range),
     #dict(type='ObjectNameFilter', classes=class_names),
@@ -190,13 +187,6 @@ test_pipeline = [
         use_dim=5,
         file_client_args=file_client_args),
     dict(type='LoadMultiViewImageFromFiles'),
-    dict(
-        type='LoadPointsFromMultiSweeps',
-        sweeps_num=1,
-        use_dim=[0, 1, 2, 3, 4],
-        file_client_args=file_client_args,
-        pad_empty_sweeps=True,
-        remove_close=True),
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
 ]
@@ -215,7 +205,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=2,
+            num_frames_per_sample=3,
             data_root=data_root,
             ann_file=data_root + 'track_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -240,7 +230,7 @@ data = dict(
 optimizer = dict(
     type='AdamW',
     #type='SGD',
-    lr=1e-4,
+    lr=1e-10,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
@@ -248,18 +238,21 @@ optimizer = dict(
             #'reference_points': dict(lr_mult=0.1)
         }),
     weight_decay=0.01)
-optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=1, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[8, 11])
-total_epochs = 12
+    step=[1])
+total_epochs = 1
 evaluation = dict(interval=1)
 
-runner = dict(type='EpochBasedRunner', max_epochs=12)
+runner = dict(type='EpochBasedRunner', max_epochs=1)
 
-find_unused_parameters = False
-load_from = 'work_dirs/track/2t/latest.pth'
+find_unused_parameters = True
+fp16 = dict(loss_scale='dynamic')
+
+#load_from = 'work_dirs/track/2t/latest.pth'
+load_from = 'work_dirs/track/v2/fp16/base3f_mem/latest.pth'

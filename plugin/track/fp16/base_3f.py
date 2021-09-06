@@ -3,10 +3,10 @@ _base_ = [
 ]
 
 model = dict(
-    fix_feats=True,
+    fix_feats=False,
 )
 
 find_unused_parameters = True
-load_from = 'work_dirs/models/backbone_neck.pth'
 
 fp16 = dict(loss_scale='dynamic')
+load_from='work_dirs/track/v2/fp16/base3f_mem/latest.pth'

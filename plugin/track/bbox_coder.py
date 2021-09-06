@@ -22,7 +22,7 @@ class DETRTrack3DCoder(BaseBBoxCoder):
                  pc_range,
                  post_center_range=None,
                  max_num=100,
-                 score_threshold=None,
+                 score_threshold=0.2,
                  num_classes=7):
         
         self.pc_range = pc_range

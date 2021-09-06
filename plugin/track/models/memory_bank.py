@@ -13,7 +13,7 @@ from ..structures import Instances
 
 class MemoryBank(nn.Module):
 
-    def __init__(self, 
+    def __init__(self,
                  args,
                  dim_in, hidden_dim, dim_out,
                  ):

@@ -33,18 +33,25 @@ model = dict(
         type='DETRTrack3DCoder',
         post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
         pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
-        max_num=300,
+        max_num=50,
         num_classes=7),
+    fix_feats=False,
     score_thresh=0.4,
-    filter_score_thresh=0.3,
+    filter_score_thresh=0.35,
     qim_args=dict(
+        qim_type='QIMBase',
         merger_dropout=0, update_query_pos=True,
-        fp_ratio=0.3, random_drop=0.1),
+        fp_ratio=0.1, random_drop=0.1),
+    mem_cfg=dict(
+        memory_bank_type='MemoryBank',
+        memory_bank_score_thresh=0.0,
+        memory_bank_len=4,
+    ),
     img_backbone=dict(
         type='ResNet',
         with_cp=False,
         #with_cp=True,
-        pretrained='open-mmlab://detectron2/resnet50_caffe',
+        #pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -60,13 +67,13 @@ model = dict(
         weight_dict=None,
         assigner=dict(
             type='HungarianAssigner3DTrack',
-            cls_cost=dict(type='FocalLossCost', weight=2.0),
+            cls_cost=dict(type='FocalLossCost', weight=4.0),
             reg_cost=dict(type='BBox3DL1Cost', weight=0.25),
             pc_range=point_cloud_range),
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,
-            gamma=2.0,
+            gamma=4.0,
             alpha=0.25,
             loss_weight=2.0),
         loss_bbox=dict(type='L1Loss', loss_weight=0.25),
@@ -198,7 +205,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=2,
+            num_frames_per_sample=3,
             data_root=data_root,
             ann_file=data_root + 'track_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -246,4 +253,4 @@ runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'
-load_from = '/home/ubuntu/projects/detr_det/mmdetection3d/work_dirs/track/v2/bbox0.25/latest.pth'
+load_from = 'work_dirs/models/f1_23ep.pth'

@@ -17,7 +17,7 @@ from mmdet3d.core.bbox.util import normalize_bbox, denormalize_bbox
 from torch.nn.init import normal_
 
 @HEADS.register_module()
-class DeformableDETR3DCamHeadPos(DETRHead):
+class DeformableDETR3DCamMulFrameHead(DETRHead):
     """Head of DeformDETR3DCam.
 
     Args:
@@ -61,7 +61,7 @@ class DeformableDETR3DCamHeadPos(DETRHead):
         self.num_cls_fcs = num_cls_fcs - 1
         self.num_feature_levels = num_feature_levels
         self.num_cams = num_cams
-        super(DeformableDETR3DCamHeadPos, self).__init__(
+        super(DeformableDETR3DCamMulFrameHead, self).__init__(
             *args, transformer=transformer, **kwargs)
         self.register_buffer('code_weights', torch.tensor(
             code_weights, requires_grad=False))

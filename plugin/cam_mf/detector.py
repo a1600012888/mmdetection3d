@@ -54,6 +54,10 @@ class Detr3DCamMulFrame(MVXTwoStageDetector):
         img: [B, T, N, C, H, W]
         """
         B = img.size(0)
+        TN = img.size(1)
+        T = TN // 6
+        img_list = img.split(dim=1, split_size_or_sections=T)
+        img = torch.stack(img_list, dim=1)
         if self.with_img_backbone and img is not None:
             input_shape = img.shape[-2:]
             # update real input shape of each single img

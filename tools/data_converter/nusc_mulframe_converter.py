@@ -176,7 +176,7 @@ def _fill_trainval_infos(nusc,
             'lidar_path': lidar_path,
             'token': sample['token'],
             'sweeps': [],
-            'cams': dict(),
+            'cams': {},
             'lidar2ego_translation': cs_record['translation'],
             'lidar2ego_rotation': cs_record['rotation'],
             'ego2global_translation': pose_record['translation'],
@@ -200,12 +200,24 @@ def _fill_trainval_infos(nusc,
             'CAM_BACK_LEFT',
             'CAM_BACK_RIGHT',
         ]
+    
+        
+            
         for cam in camera_types:
             cam_token = sample['data'][cam]
-            cam_path, _, cam_intrinsic = nusc.get_sample_data(cam_token)
-            cam_info = obtain_sensor2top(nusc, cam_token, l2e_t, l2e_r_mat,
-                                         e2g_t, e2g_r_mat, cam)
-            cam_info.update(cam_intrinsic=cam_intrinsic)
+            
+            _i = 0
+            cam_info_list = []
+            while len(_i) < 3:
+                _i += 1
+                sd_rec = nusc.get('sample_data', cam_token)
+                cam_path, _, cam_intrinsic = nusc.get_sample_data(cam_token)
+                cam_info = obtain_sensor2top(nusc, cam_token, l2e_t, l2e_r_mat,
+                                            e2g_t, e2g_r_mat, cam)
+                cam_info.update(cam_intrinsic=cam_intrinsic)
+                cam_info_list.append(cam_info)
+                cam_token = sd_rec['prev']
+            
             info['cams'].update({cam: cam_info})
 
         # obtain sweeps for a single key-frame

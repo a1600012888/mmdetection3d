@@ -262,8 +262,9 @@ class Detr3DCamCrossAttenMulFrame(BaseModule):
 
         if self.use_frame_offsets:
             frame_offsets = self.frame_offsets(query).view(bs, num_query, 3, self.num_frames - 1)
-            frame_offsets_list = [frame_offsets[..., i] for i in range(self.num_frames - 1)]
-            frame_offsets_list.append(None)
+            frame_offsets_list = [None]
+            frame_offsets_list_ = [frame_offsets[..., i] for i in range(self.num_frames - 1)]
+            frame_offsets_list = frame_offsets_list + frame_offsets_list_
         else:
             frame_offsets_list = [None] * self.num_frames
 

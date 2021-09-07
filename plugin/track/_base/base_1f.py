@@ -33,11 +33,11 @@ model = dict(
         type='DETRTrack3DCoder',
         post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
         pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
-        max_num=50,
+        max_num=300,
         num_classes=7),
     fix_feats=False,
     score_thresh=0.3,
-    filter_score_thresh=0.25,
+    filter_score_thresh=0.2,
     qim_args=dict(
         qim_type='QIMBase',
         merger_dropout=0, update_query_pos=True,
@@ -205,7 +205,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=2,
+            num_frames_per_sample=1,
             data_root=data_root,
             ann_file=data_root + 'track_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -245,11 +245,11 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[8, 11])
-total_epochs = 12
-evaluation = dict(interval=2)
+    step=[44, 47])
+total_epochs = 48
+evaluation = dict(interval=48)
 
-runner = dict(type='EpochBasedRunner', max_epochs=12)
+runner = dict(type='EpochBasedRunner', max_epochs=48)
 
 find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'

@@ -33,18 +33,25 @@ model = dict(
         type='DETRTrack3DCoder',
         post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
         pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
-        max_num=300,
+        max_num=50,
         num_classes=7),
+    fix_feats=False,
     score_thresh=0.3,
-    filter_score_thresh=0.2,
+    filter_score_thresh=0.25,
     qim_args=dict(
+        qim_type='QIMBase',
         merger_dropout=0, update_query_pos=True,
-        fp_ratio=0.3, random_drop=0.1),
+        fp_ratio=0.1, random_drop=0.1),
+    mem_cfg=dict(
+        memory_bank_type='MemoryBank',
+        memory_bank_score_thresh=0.0,
+        memory_bank_len=4,
+    ),
     img_backbone=dict(
         type='ResNet',
         with_cp=False,
         #with_cp=True,
-        pretrained='open-mmlab://detectron2/resnet50_caffe',
+        #pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -198,7 +205,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=2,
+            num_frames_per_sample=6,
             data_root=data_root,
             ann_file=data_root + 'track_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -240,11 +247,10 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     step=[8, 11])
 total_epochs = 12
-evaluation = dict(interval=12)
+evaluation = dict(interval=2)
 
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'
-load_from = 'work_dirs/models/backbone_neck.pth'
-fp16 = dict(loss_scale='dynamic')
+load_from = 'work_dirs/models/f1_23ep.pth'

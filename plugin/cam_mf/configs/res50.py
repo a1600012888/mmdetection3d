@@ -2,9 +2,8 @@ _base_ = [
     '../../_base_/datasets/nus-3d.py',
     '../../_base_/default_runtime.py'
 ]
-workflow = [('train', 1)]
 plugin=True
-plugin_dir='plugin/track/'
+plugin_dir='plugin/cam_mf/'
 
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_size = [0.2, 0.2, 8]
@@ -13,8 +12,8 @@ img_norm_cfg = dict(
     mean=[103.530, 116.280, 123.675], std=[1.0, 1.0, 1.0], to_rgb=False)
 
 class_names = [
-    'car', 'truck', 'bus', 'trailer',
-    'motorcycle', 'bicycle', 'pedestrian',
+    'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',
+    'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
 ]
 
 input_modality = dict(
@@ -25,33 +24,11 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamTracker',
-    use_grid_mask=True,  # use grid mask
-    num_classes=7,
-    num_query=300,
-    bbox_coder=dict(
-        type='DETRTrack3DCoder',
-        post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
-        pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
-        max_num=50,
-        num_classes=7),
-    fix_feats=False,
-    score_thresh=0.3,
-    filter_score_thresh=0.25,
-    qim_args=dict(
-        qim_type='QIMBase',
-        merger_dropout=0, update_query_pos=True,
-        fp_ratio=0.1, random_drop=0.1),
-    mem_cfg=dict(
-        memory_bank_type='MemoryBank',
-        memory_bank_score_thresh=0.0,
-        memory_bank_len=4,
-    ),
+    type='Detr3DCam',
+    use_grid_mask=True, # use grid mask
     img_backbone=dict(
         type='ResNet',
-        with_cp=False,
-        #with_cp=True,
-        #pretrained='open-mmlab://detectron2/resnet50_caffe',
+        pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -61,23 +38,6 @@ model = dict(
         style='caffe',
         dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
         stage_with_dcn=(False, False, True, True)),
-    loss_cfg=dict(
-        type='ClipMatcher',
-        num_classes=7,
-        weight_dict=None,
-        assigner=dict(
-            type='HungarianAssigner3DTrack',
-            cls_cost=dict(type='FocalLossCost', weight=2.0),
-            reg_cost=dict(type='BBox3DL1Cost', weight=0.25),
-            pc_range=point_cloud_range),
-        loss_cls=dict(
-            type='FocalLoss',
-            use_sigmoid=True,
-            gamma=2.0,
-            alpha=0.25,
-            loss_weight=2.0),
-        loss_bbox=dict(type='L1Loss', loss_weight=0.25),
-    ),
     img_neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -89,14 +49,15 @@ model = dict(
         norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamHeadTrack',
-        num_classes=7,
+        type='DeformableDETR3DCamHead',
+        num_query=300,
+        num_classes=10,
         in_channels=256,
-        num_cams=6,
-        num_feature_levels=4,
+        sync_cls_avg_factor=True,
         with_box_refine=True,
+        as_two_stage=False,
         transformer=dict(
-            type='Detr3DCamTransformerPlus',
+            type='Detr3DCamTransformer',
             decoder=dict(
                 type='Detr3DCamTransformerDecoder',
                 num_layers=6,
@@ -110,8 +71,10 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAttenTrack',
+                            type='Detr3DCamCrossAtten',
                             pc_range=point_cloud_range,
+                            use_dconv=False,
+                            use_level_cam_embed=False,
                             num_points=1,
                             embed_dims=256)
                     ],
@@ -119,12 +82,26 @@ model = dict(
                     ffn_dropout=0.1,
                     operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
                                      'ffn', 'norm')))),
-        pc_range=point_cloud_range,
+        bbox_coder=dict(
+            type='DETR3DCoder',
+            post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
+            pc_range=point_cloud_range,
+            max_num=300,
+            voxel_size=voxel_size,
+            num_classes=10),
         positional_encoding=dict(
             type='SinePositionalEncoding',
             num_feats=128,
             normalize=True,
-            offset=-0.5),),
+            offset=-0.5),
+        loss_cls=dict(
+            type='FocalLoss',
+            use_sigmoid=True,
+            gamma=2.0,
+            alpha=0.25,
+            loss_weight=2.0),
+        loss_bbox=dict(type='L1Loss', loss_weight=0.25),
+        loss_iou=dict(type='GIoU3DLoss', loss_weight=0.0)),
     # model training and testing settings
     train_cfg=dict(
         grid_size=[512, 512, 1],
@@ -156,10 +133,46 @@ model = dict(
         post_max_size=83,
         nms_thr=0.2))
 
-dataset_type = 'NuScenesTrackDataset'
+dataset_type = 'NuScenesDataset'
 data_root = 'data/nuscenes/'
 
 file_client_args = dict(backend='disk')
+
+db_sampler = dict(
+    data_root=data_root,
+    info_path=data_root + 'nuscenes_dbinfos_train.pkl',
+    rate=1.0,
+    prepare=dict(
+        filter_by_difficulty=[-1],
+        filter_by_min_points=dict(
+            car=5,
+            truck=5,
+            bus=5,
+            trailer=5,
+            construction_vehicle=5,
+            traffic_cone=5,
+            barrier=5,
+            motorcycle=5,
+            bicycle=5,
+            pedestrian=5)),
+    classes=class_names,
+    sample_groups=dict(
+        car=2,
+        truck=3,
+        construction_vehicle=7,
+        bus=4,
+        trailer=6,
+        barrier=2,
+        motorcycle=6,
+        bicycle=6,
+        pedestrian=2,
+        traffic_cone=2),
+    points_loader=dict(
+        type='LoadPointsFromFile',
+        coord_type='LIDAR',
+        load_dim=5,
+        use_dim=[0, 1, 2, 3, 4],
+        file_client_args=file_client_args))
 
 train_pipeline = [
     dict(
@@ -169,15 +182,33 @@ train_pipeline = [
         use_dim=5,
         file_client_args=file_client_args),
     dict(type='LoadMultiViewImageFromFiles'),
+    dict(
+        type='LoadPointsFromMultiSweeps',
+        sweeps_num=9,
+        use_dim=[0, 1, 2, 3, 4],
+        file_client_args=file_client_args,
+        pad_empty_sweeps=True,
+        remove_close=True),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
-    dict(type='InstanceRangeFilter', point_cloud_range=point_cloud_range),
-    #dict(type='ObjectNameFilter', classes=class_names),
+    # dict(type='ObjectSample', db_sampler=db_sampler),
+    # dict(
+    #     type='GlobalRotScaleTrans',
+    #     rot_range=[-0.3925, 0.3925],
+    #     scale_ratio_range=[0.95, 1.05],
+    #     translation_std=[0, 0, 0]),
+    # dict(
+    #     type='RandomFlip3D',
+    #     sync_2d=False,
+    #     flip_ratio_bev_horizontal=0.5,
+    #     flip_ratio_bev_vertical=0.5),
+    dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
+    dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
+    dict(type='ObjectNameFilter', classes=class_names),
+    dict(type='PointShuffle'),
     dict(type='Normalize3D', **img_norm_cfg),
-    dict(type='Pad3D', size_divisor=32)]
-
-train_pipeline_post = [
-    dict(type='FormatBundle3DTrack'),
-    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'instance_inds', 'img', 'timestamp'])
+    dict(type='Pad3D', size_divisor=32),
+    dict(type='DefaultFormatBundle3D', class_names=class_names),
+    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'img'])
 ]
 test_pipeline = [
     dict(
@@ -187,29 +218,62 @@ test_pipeline = [
         use_dim=5,
         file_client_args=file_client_args),
     dict(type='LoadMultiViewImageFromFiles'),
+    dict(
+        type='LoadPointsFromMultiSweeps',
+        sweeps_num=9,
+        use_dim=[0, 1, 2, 3, 4],
+        file_client_args=file_client_args,
+        pad_empty_sweeps=True,
+        remove_close=True),
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
-]
-
-test_pipeline_post = [
-    dict(type='FormatBundle3DTrack'),
-    dict(type='Collect3D', keys=['points', 'img', 'timestamp'])
-    #dict(type='Collect3D', keys=['points', 'img',])
+    dict(
+        type='MultiScaleFlipAug3D',
+        img_scale=(1333, 800),
+        pts_scale_ratio=1,
+        flip=False,
+        transforms=[
+            dict(
+                type='DefaultFormatBundle3D',
+                class_names=class_names,
+                with_label=False),
+            dict(type='Collect3D', keys=['points', 'img'])
+        ])
 ]
 
 # construct a pipeline for data and gt loading in show function
 # please keep its loading function consistent with test_pipeline (e.g. client)
+eval_pipeline = [
+    dict(
+        type='LoadPointsFromFile',
+        coord_type='LIDAR',
+        load_dim=5,
+        use_dim=5,
+        file_client_args=file_client_args),
+    dict(
+        type='LoadPointsFromMultiSweeps',
+        sweeps_num=9,
+        use_dim=[0, 1, 2, 3, 4],
+        file_client_args=file_client_args,
+        pad_empty_sweeps=True,
+        remove_close=True),
+    dict(
+        type='DefaultFormatBundle3D',
+        class_names=class_names,
+        with_label=False),
+    dict(type='Collect3D', keys=['points'])
+]
 
 data = dict(
     samples_per_gpu=1,
     workers_per_gpu=4,
     train=dict(
+        # type='CBGSDataset',
+        # dataset=dict(
             type=dataset_type,
-            num_frames_per_sample=2,
             data_root=data_root,
-            ann_file=data_root + 'track_infos_train.pkl',
-            pipeline_single=train_pipeline,
-            pipeline_post=train_pipeline_post,
+            ann_file=data_root + 'nuscenes_infos_train.pkl',
+            pipeline=train_pipeline,
             classes=class_names,
             modality=input_modality,
             test_mode=False,
@@ -218,18 +282,11 @@ data = dict(
             # and box_type_3d='Depth' in sunrgbd and scannet dataset.
             box_type_3d='LiDAR'),
     # ),
-    val=dict(type=dataset_type, pipeline_single=test_pipeline, pipeline_post=test_pipeline_post, classes=class_names, modality=input_modality,
-             ann_file=data_root + 'track_infos_val.pkl',
-             num_frames_per_sample=1,),
-    test=dict(type=dataset_type, pipeline_single=test_pipeline,
-              pipeline_post=test_pipeline_post,
-              classes=class_names, modality=input_modality,
-              ann_file=data_root + 'track_infos_val.pkl',
-              num_frames_per_sample=1,))
+    val=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality),
+    test=dict(pipeline=test_pipeline, classes=class_names, modality=input_modality))
 
 optimizer = dict(
     type='AdamW',
-    #type='SGD',
     lr=2e-4,
     paramwise_cfg=dict(
         custom_keys={
@@ -247,10 +304,9 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     step=[8, 11])
 total_epochs = 12
-evaluation = dict(interval=2)
+evaluation = dict(interval=2, pipeline=eval_pipeline)
 
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
-#load_from = 'work_dirs/track/2t/latest.pth'
-load_from = 'work_dirs/models/f1_23ep.pth'
+#load_from='work_dirs/models/fcos3d.pth'

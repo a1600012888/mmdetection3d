@@ -25,7 +25,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamTracker',
+    type='Detr3DCamRadarTracker',
     use_grid_mask=True,  # use grid mask
     num_classes=7,
     num_query=300,
@@ -47,6 +47,11 @@ model = dict(
         memory_bank_score_thresh=0.0,
         memory_bank_len=4,
     ),
+    radar_encoder=dict(
+        type='RadarPointEncoderXY',
+        in_channels=10,
+        out_channels=[32, 64],
+        norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01),),
     img_backbone=dict(
         type='ResNet',
         with_cp=False,
@@ -89,7 +94,7 @@ model = dict(
         norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamHeadTrack',
+        type='DeformableDETR3DCamRadarHeadTrack',
         num_classes=7,
         in_channels=256,
         num_cams=6,
@@ -110,10 +115,12 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamCrossAttenTrack',
+                            type='Detr3DCamRadarSparseAttenTrack',
                             pc_range=point_cloud_range,
                             num_points=1,
-                            embed_dims=256)
+                            embed_dims=256,
+                            radar_topk=10,
+                            radar_dims=64)
                     ],
                     feedforward_channels=512,
                     ffn_dropout=0.1,
@@ -156,7 +163,9 @@ model = dict(
         post_max_size=83,
         nms_thr=0.2))
 
-dataset_type = 'NuScenesTrackDataset'
+# x y z rcs vx_comp vy_comp x_rms y_rms vx_rms vy_rms
+radar_use_dims = [0, 1, 2, 5, 8, 9, 12, 13, 16, 17]
+dataset_type = 'NuScenesTrackDatasetRadar'
 data_root = 'data/nuscenes/'
 
 file_client_args = dict(backend='disk')
@@ -169,6 +178,12 @@ train_pipeline = [
         use_dim=5,
         file_client_args=file_client_args),
     dict(type='LoadMultiViewImageFromFiles'),
+    dict(
+        type='LoadRadarPointsMultiSweeps',
+        load_dim=18,
+        sweeps_num=2,
+        use_dim=radar_use_dims,
+        max_num=600, ),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
     dict(type='InstanceRangeFilter', point_cloud_range=point_cloud_range),
     #dict(type='ObjectNameFilter', classes=class_names),
@@ -177,7 +192,7 @@ train_pipeline = [
 
 train_pipeline_post = [
     dict(type='FormatBundle3DTrack'),
-    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'instance_inds', 'img', 'timestamp'])
+    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'instance_inds', 'img', 'timestamp', 'l2g_r_mat', 'l2g_t', 'radar'])
 ]
 test_pipeline = [
     dict(
@@ -187,13 +202,19 @@ test_pipeline = [
         use_dim=5,
         file_client_args=file_client_args),
     dict(type='LoadMultiViewImageFromFiles'),
+    dict(
+        type='LoadRadarPointsMultiSweeps',
+        load_dim=18,
+        sweeps_num=2,
+        use_dim=radar_use_dims,
+        max_num=600, ),
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
 ]
 
 test_pipeline_post = [
     dict(type='FormatBundle3DTrack'),
-    dict(type='Collect3D', keys=['points', 'img', 'timestamp'])
+    dict(type='Collect3D', keys=['points', 'img', 'timestamp', 'l2g_r_mat', 'l2g_t', 'radar'])
     #dict(type='Collect3D', keys=['points', 'img',])
 ]
 
@@ -205,9 +226,9 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=2,
+            num_frames_per_sample=1,
             data_root=data_root,
-            ann_file=data_root + 'track_infos_train.pkl',
+            ann_file=data_root + 'track_radar_infos_train.pkl',
             pipeline_single=train_pipeline,
             pipeline_post=train_pipeline_post,
             classes=class_names,
@@ -219,12 +240,12 @@ data = dict(
             box_type_3d='LiDAR'),
     # ),
     val=dict(type=dataset_type, pipeline_single=test_pipeline, pipeline_post=test_pipeline_post, classes=class_names, modality=input_modality,
-             ann_file=data_root + 'track_infos_val.pkl',
+             ann_file=data_root + 'track_radar_infos_val.pkl',
              num_frames_per_sample=1,),
     test=dict(type=dataset_type, pipeline_single=test_pipeline,
               pipeline_post=test_pipeline_post,
               classes=class_names, modality=input_modality,
-              ann_file=data_root + 'track_infos_val.pkl',
+              ann_file=data_root + 'track_radar_infos_val.pkl',
               num_frames_per_sample=1,))
 
 optimizer = dict(
@@ -234,8 +255,8 @@ optimizer = dict(
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
-            #'offsets': dict(lr_mult=0.1),
-            #'reference_points': dict(lr_mult=0.1)
+            'offsets': dict(lr_mult=0.1),
+            'reference_points': dict(lr_mult=0.1)
         }),
     weight_decay=0.01)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
@@ -254,3 +275,5 @@ runner = dict(type='EpochBasedRunner', max_epochs=12)
 find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'
 load_from = 'work_dirs/models/f1_23ep.pth'
+
+#fp16 = dict(loss_scale='dynamic')

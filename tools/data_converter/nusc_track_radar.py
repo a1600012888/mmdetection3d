@@ -12,9 +12,9 @@ from typing import List, Tuple, Union
 from mmdet3d.core.bbox.box_np_ops import points_cam2img
 from mmdet3d.datasets import NuScenesDataset
 
-nus_categories = ('car', 'truck', 'trailer', 'bus', 'construction_vehicle',
-                  'bicycle', 'motorcycle', 'pedestrian', 'traffic_cone',
-                  'barrier')
+#  remove the classes barrier, trafficcone and construction_vehicle
+nus_categories = ('car', 'truck', 'trailer', 'bus',
+                  'bicycle', 'motorcycle', 'pedestrian',)
 
 nus_attributes = ('cycle.with_rider', 'cycle.without_rider',
                   'pedestrian.moving', 'pedestrian.standing',
@@ -27,9 +27,7 @@ def create_nuscenes_infos(root_path,
                           version='v1.0-trainval',
                           max_sweeps=10):
     """Create info file of nuscene dataset.
-
     Given the raw data, generate its related info file in pkl format.
-
     Args:
         root_path (str): Path of the data root.
         info_prefix (str): Prefix of the info file to be generated.
@@ -101,13 +99,10 @@ def create_nuscenes_infos(root_path,
 
 def get_available_scenes(nusc):
     """Get available scenes from the input nuscenes class.
-
     Given the raw data, get the information of available scenes for
     further info generation.
-
     Args:
         nusc (class): Dataset class in the nuScenes dataset.
-
     Returns:
         available_scenes (list[dict]): List of basic information for the
             available scenes.
@@ -146,7 +141,6 @@ def _fill_trainval_infos(nusc,
                          test=False,
                          max_sweeps=10):
     """Generate the train/val infos from the raw data.
-
     Args:
         nusc (:obj:`NuScenes`): Dataset class in the nuScenes dataset.
         train_scenes (list[str]): Basic information of training scenes.
@@ -154,7 +148,6 @@ def _fill_trainval_infos(nusc,
         test (bool): Whether use the test mode. In the test mode, no
             annotations can be accessed. Default: False.
         max_sweeps (int): Max number of sweeps. Default: 10.
-
     Returns:
         tuple[list[dict]]: Information of training set and validation set
             that will be saved to the info file.
@@ -176,7 +169,8 @@ def _fill_trainval_infos(nusc,
             'lidar_path': lidar_path,
             'token': sample['token'],
             'sweeps': [],
-            'cams': {},
+            'cams': dict(),
+            'radars': dict(),
             'lidar2ego_translation': cs_record['translation'],
             'lidar2ego_rotation': cs_record['rotation'],
             'ego2global_translation': pose_record['translation'],
@@ -200,27 +194,39 @@ def _fill_trainval_infos(nusc,
             'CAM_BACK_LEFT',
             'CAM_BACK_RIGHT',
         ]
-    
-        
-            
         for cam in camera_types:
             cam_token = sample['data'][cam]
-            
-            _i = 0
-            cam_info_list = []
-            while _i < 3:
-                _i += 1
-                sd_rec = nusc.get('sample_data', cam_token)
-                cam_path, _, cam_intrinsic = nusc.get_sample_data(cam_token)
-                cam_info = obtain_sensor2top(nusc, cam_token, l2e_t, l2e_r_mat,
-                                            e2g_t, e2g_r_mat, cam)
-                cam_info.update(cam_intrinsic=cam_intrinsic)
-                cam_info_list.append(cam_info)
-                cam_token = sd_rec['prev']
-                if cam_token == '':
-                    break
-            
+            cam_path, _, cam_intrinsic = nusc.get_sample_data(cam_token)
+            cam_info = obtain_sensor2top(nusc, cam_token, l2e_t, l2e_r_mat,
+                                         e2g_t, e2g_r_mat, cam)
+            cam_info.update(cam_intrinsic=cam_intrinsic)
             info['cams'].update({cam: cam_info})
+
+        # radar
+        radar_names = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT',  'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT']
+
+        for radar_name in radar_names:
+            radar_token = sample['data'][radar_name]
+            radar_rec = nusc.get('sample_data', radar_token)
+            sweeps = []
+
+            while len(sweeps) < 5:
+                if not radar_rec['prev'] == '':
+                    radar_path, _, radar_intrin = nusc.get_sample_data(radar_token)
+
+                    radar_info = obtain_sensor2top(nusc, radar_token, l2e_t, l2e_r_mat,
+                                                e2g_t, e2g_r_mat, radar_name)
+                    sweeps.append(radar_info)
+                    radar_token = radar_rec['prev']
+                    radar_rec = nusc.get('sample_data', radar_token)
+                else:
+                    radar_path, _, radar_intrin = nusc.get_sample_data(radar_token)
+
+                    radar_info = obtain_sensor2top(nusc, radar_token, l2e_t, l2e_r_mat,
+                                                e2g_t, e2g_r_mat, radar_name)
+                    sweeps.append(radar_info)
+            
+            info['radars'].update({radar_name: sweeps})
 
         # obtain sweeps for a single key-frame
         sd_rec = nusc.get('sample_data', sample['data']['LIDAR_TOP'])
@@ -262,6 +268,13 @@ def _fill_trainval_infos(nusc,
                 if names[i] in NuScenesDataset.NameMapping:
                     names[i] = NuScenesDataset.NameMapping[names[i]]
             names = np.array(names)
+            # update valid now
+            name_in_track = [_a in nus_categories for _a in names]
+            name_in_track = np.array(name_in_track)
+            valid_flag = np.logical_and(valid_flag, name_in_track)
+
+            # add instance_ids
+            instance_inds = [nusc.getind('instance', ann['instance_token']) for ann in annotations]
             # we need to convert rot to SECOND format.
             gt_boxes = np.concatenate([locs, dims, -rots - np.pi / 2], axis=1)
             assert len(gt_boxes) == len(
@@ -274,6 +287,7 @@ def _fill_trainval_infos(nusc,
             info['num_radar_pts'] = np.array(
                 [a['num_radar_pts'] for a in annotations])
             info['valid_flag'] = valid_flag
+            info['instance_inds'] = instance_inds
 
         if sample['scene_token'] in train_scenes:
             train_nusc_infos.append(info)
@@ -291,7 +305,6 @@ def obtain_sensor2top(nusc,
                       e2g_r_mat,
                       sensor_type='lidar'):
     """Obtain the info with RT matric from general sensor to Top LiDAR.
-
     Args:
         nusc (class): Dataset class in the nuScenes dataset.
         sensor_token (str): Sample data token corresponding to the
@@ -303,7 +316,6 @@ def obtain_sensor2top(nusc,
         e2g_r_mat (np.ndarray): Rotation matrix from ego to global
             in shape (3, 3).
         sensor_type (str): Sensor to calibrate. Default: 'lidar'.
-
     Returns:
         sweep (dict): Sweep information after transformation.
     """
@@ -346,7 +358,6 @@ def obtain_sensor2top(nusc,
 
 def export_2d_annotation(root_path, info_path, version, mono3d=True):
     """Export 2d annotation from the info file and raw data.
-
     Args:
         root_path (str): Root path of the raw data.
         info_path (str): Path of the info file.
@@ -413,13 +424,11 @@ def get_2d_boxes(nusc,
                  visibilities: List[str],
                  mono3d=True):
     """Get the 2D annotation records for a given `sample_data_token`.
-
     Args:
         sample_data_token (str): Sample data token belonging to a camera \
             keyframe.
         visibilities (list[str]): Visibility filter.
         mono3d (bool): Whether to get boxes with mono3d annotation.
-
     Return:
         list[dict]: List of 2D annotation record that belongs to the input
             `sample_data_token`.
@@ -540,12 +549,10 @@ def post_process_coords(
 ) -> Union[Tuple[float, float, float, float], None]:
     """Get the intersection of the convex hull of the reprojected bbox corners
     and the image canvas, return None if no intersection.
-
     Args:
         corner_coords (list[int]): Corner coordinates of reprojected
             bounding box.
         imsize (tuple[int]): Size of the image canvas.
-
     Return:
         tuple [float]: Intersection of the convex hull of the 2D box
             corners and the image canvas.
@@ -572,7 +579,6 @@ def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
                     sample_data_token: str, filename: str) -> OrderedDict:
     """Generate one 2D annotation record given various informations on top of
     the 2D bounding box coordinates.
-
     Args:
         ann_rec (dict): Original 3d annotation record.
         x1 (float): Minimum value of the x coordinate.
@@ -582,7 +588,6 @@ def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
         sample_data_token (str): Sample data token.
         filename (str):The corresponding image file where the annotation
             is present.
-
     Returns:
         dict: A sample 2D annotation record.
             - file_name (str): flie name
@@ -631,9 +636,6 @@ def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
 
     return coco_rec
 
-if __name__ == '__main__':
 
-    create_nuscenes_infos('data/nuscenes',
-                          'cam_mulframe',
-                          version='v1.0-trainval',
-                          max_sweeps=10)
+if __name__ == '__main__':
+    create_nuscenes_infos('data/nuscenes/', 'track_radar')

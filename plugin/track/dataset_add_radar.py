@@ -140,6 +140,9 @@ class NuScenesTrackDatasetRadar(Dataset):
         self.sample_mode = sample_mode
         self.sample_interval = sample_interval
         self.num_frames_per_sample = num_frames_per_sample
+
+        if not self.test_mode:
+            self.num_frames_per_sample += 1
         self.num_samples = len(self.data_infos) - (self.num_frames_per_sample - 1) * \
             self.sample_interval
 

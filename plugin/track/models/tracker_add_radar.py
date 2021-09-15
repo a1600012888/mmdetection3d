@@ -180,8 +180,41 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
         reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
         reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
 
+        velo_pad_ = velocity.new_zeros((num_query, 1))
+        velo_pad = torch.cat((velocity, velo_pad_), dim=-1)
+
+        reference_points = reference_points + velo_pad * time_delta
+
+        ref_pts[..., 0:1] = (ref_pts[..., 0:1] - pc_range[0]) / (pc_range[3] - pc_range[0])
+        ref_pts[..., 1:2] = (ref_pts[..., 1:2] - pc_range[1]) / (pc_range[4] - pc_range[1])
+        ref_pts[..., 2:3] = (ref_pts[..., 2:3] - pc_range[2]) / (pc_range[5] - pc_range[2])
+
+        ref_pts = inverse_sigmoid(ref_pts)
+
+        return ref_pts
+
+    def velo_update_global(self, ref_pts, velocity, l2g_r1, l2g_t1, l2g_r2, l2g_t2,
+                           time_delta):
+        '''
+        Args:
+            ref_pts (Tensor): (num_query, 3).  in inevrse sigmoid space
+            velocity (Tensor): (num_query, 2). m/s
+                in global frame. vx, vy
+            global2lidar (np.Array) [4,4].
+        Outs:
+            ref_pts (Tensor): (num_query, 3).  in inevrse sigmoid space
+        '''
+        # print(l2g_r1.type(), l2g_t1.type(), ref_pts.type())
+        time_delta = time_delta.type(torch.float)
+        num_query = ref_pts.size(0)
+        reference_points = ref_pts.sigmoid().clone()
+        pc_range = self.pc_range
+        reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
+        reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
+        reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
+
         reference_points = reference_points @ l2g_r1 + l2g_t1
-        velo_pad_ = velocity.new_ones((num_query, 1))
+        velo_pad_ = velocity.new_zeros((num_query, 1))
         velo_pad = torch.cat((velocity, velo_pad_), dim=-1)
 
         reference_points = reference_points + velo_pad * time_delta
@@ -458,15 +491,15 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
             dict: Losses of different branches.
         """
 
-        # [T, 3, 3]
+        # [T+1, 3, 3]
         l2g_r_mat = l2g_r_mat[0]
-        # change to [T, 1, 3]
+        # change to [T+1, 1, 3]
         l2g_t = l2g_t[0].unsqueeze(dim=1)
 
         timestamp = timestamp
 
         bs = img.size(0)
-        num_frame = img.size(1)
+        num_frame = img.size(1) - 1
         track_instances = self._generate_empty_tracks()
 
         # init gt instances!
@@ -476,6 +509,30 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
             boxes = gt_bboxes_3d[0][i].tensor.to(img.device)
             # normalize gt bboxes here!
             boxes = normalize_bbox(boxes, self.pc_range)
+
+            ## change the velocity from global frame, to recitifed velo
+            velo_xy = boxes[..., 8:10]
+            x = torch.cat((
+                boxes[..., 0:1], 
+                boxes[..., 1:2], 
+                boxes[..., 4:5], 
+            ), dim=-1)
+            num_box, _ = velo_xy.shape
+            pad_ = velo_xy.new_zeros((num_box, 1))
+            velo_pad = torch.cat((velo_xy, pad_), dim=-1)
+
+            l2g_r2 = l2g_r_mat[i+1]
+            l2g_t2 = l2g_t[i+1]
+            l2g_r1 = l2g_r_mat[i]
+            l2g_t1 = l2g_t[i]
+            g2l_r2 = torch.linalg.inv(l2g_r2).type(torch.float)
+
+            velo = velo_pad - (l2g_t2 - l2g_t1) - x @ (l2g_r2 - l2g_r1)
+            velo = velo @ g2l_r2
+            velo = velo[..., 0:2]
+
+            boxes[..., 8:10] = velo
+
             gt_instances.boxes = boxes
             gt_instances.labels = gt_labels_3d[0][i]
             gt_instances.obj_ids = instance_inds[0][i]

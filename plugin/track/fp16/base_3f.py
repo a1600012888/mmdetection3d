@@ -9,4 +9,4 @@ model = dict(
 find_unused_parameters = True
 
 fp16 = dict(loss_scale='dynamic')
-load_from='work_dirs/track/v2/fp16/base3f_mem/latest.pth'
+#load_from='work_dirs/track/v2/fp16/base3f_mem/latest.pth'

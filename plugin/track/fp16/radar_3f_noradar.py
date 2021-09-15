@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base/radar_base_5f.py'
+    '../_base/radar_base_3f_noradar.py'
 ]
 
 model = dict(

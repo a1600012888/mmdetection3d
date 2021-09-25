@@ -146,9 +146,12 @@ class QueryInteractionModule(QueryInteractionBase):
                 fp_track_instances = inactive_instances
             else:
                 # randomly select num_fp from inactive_instances
-                fp_indexes = np.random.permutation(len(inactive_instances))
-                fp_indexes = fp_indexes[:num_fp]
-                # TODO: change idxes?
+                # fp_indexes = np.random.permutation(len(inactive_instances))
+                # fp_indexes = fp_indexes[:num_fp]
+                # fp_track_instances = inactive_instances[fp_indexes]
+
+                # v2: select the fps with top scores rather than random selection
+                fp_indexes = torch.argsort(inactive_instances.scores)[-num_fp:]
                 fp_track_instances = inactive_instances[fp_indexes]
 
             merged_track_instances = Instances.cat([active_track_instances,

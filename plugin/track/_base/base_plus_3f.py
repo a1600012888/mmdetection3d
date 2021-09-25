@@ -3,8 +3,8 @@ _base_ = [
     '../../_base_/default_runtime.py'
 ]
 workflow = [('train', 1)]
-plugin=True
-plugin_dir='plugin/track/'
+plugin = True
+plugin_dir = 'plugin/track/'
 
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_size = [0.2, 0.2, 8]
@@ -25,7 +25,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamRadarTracker',
+    type='Detr3DCamTrackerPlus',
     use_grid_mask=True,  # use grid mask
     num_classes=7,
     num_query=300,
@@ -41,7 +41,7 @@ model = dict(
     qim_args=dict(
         qim_type='QIMBase',
         merger_dropout=0, update_query_pos=True,
-        fp_ratio=0.1, random_drop=0.1),
+        fp_ratio=0.2, random_drop=0.1),
     mem_cfg=dict(
         memory_bank_type='MemoryBank',
         memory_bank_score_thresh=0.0,
@@ -94,16 +94,16 @@ model = dict(
         norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamRadarHeadTrack',
+        type='DeformableDETR3DCamHeadTrackPlus',
         num_classes=7,
         in_channels=256,
         num_cams=6,
         num_feature_levels=4,
         with_box_refine=True,
         transformer=dict(
-            type='Detr3DCamTransformerPlus',
+            type='Detr3DCamTrackTransformer',
             decoder=dict(
-                type='Detr3DCamTransformerDecoder',
+                type='Detr3DCamTrackPlusTransformerDecoder',
                 num_layers=6,
                 return_intermediate=True,
                 transformerlayers=dict(
@@ -115,9 +115,10 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamRadarSparseAttenTrack',
+                            type='Detr3DCamPlusSparseAttenTrack',
                             pc_range=point_cloud_range,
-                            num_points=1,
+                            num_points=4,
+                            num_heads=8,
                             embed_dims=256,
                             radar_topk=10,
                             radar_dims=64)

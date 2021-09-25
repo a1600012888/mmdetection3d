@@ -115,12 +115,10 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamRadarSparseAttenTrack',
+                            type='Detr3DCamCrossAttenTrack',
                             pc_range=point_cloud_range,
                             num_points=1,
-                            embed_dims=256,
-                            radar_topk=10,
-                            radar_dims=64)
+                            embed_dims=256,)
                     ],
                     feedforward_channels=512,
                     ffn_dropout=0.1,
@@ -142,7 +140,7 @@ model = dict(
         gaussian_overlap=0.1,
         max_objs=500,
         min_radius=2,
-        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2],
+        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2],
         assigner=dict(
             type='HungarianAssigner3D',
             cls_cost=dict(type='FocalLossCost', weight=2.0),
@@ -226,7 +224,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=3,
+            num_frames_per_sample=5,
             data_root=data_root,
             ann_file=data_root + 'track_radar_infos_train.pkl',
             pipeline_single=train_pipeline,

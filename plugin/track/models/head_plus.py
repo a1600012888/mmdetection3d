@@ -15,12 +15,10 @@ from mmdet.models.utils import build_transformer
 
 
 @HEADS.register_module()
-class DeformableDETR3DCamRadarHeadTrack(nn.Module):
+class DeformableDETR3DCamHeadTrackPlus(nn.Module):
     """Head of DeformDETR3DCamTrack. 
 
     Args:
-        with_box_refine (bool): Whether to refine the reference points
-            in the decoder. Defaults to False.
         transformer (obj:`ConfigDict`): ConfigDict is used for building
             the Encoder and Decoder.
     """
@@ -37,7 +35,6 @@ class DeformableDETR3DCamRadarHeadTrack(nn.Module):
                      num_feats=128,
                      normalize=True,
                      offset=-0.5),
-                 with_box_refine=True,
                  num_cls_fcs=2,
                  test_cfg=dict(max_per_img=100),
                  init_cfg=None,
@@ -49,14 +46,12 @@ class DeformableDETR3DCamRadarHeadTrack(nn.Module):
             rotation: output unnormalized sine and cosine
         code weights: weights the bbox L1 loss
         """
-        super(DeformableDETR3DCamRadarHeadTrack, self).__init__()
-
-        self.with_box_refine = with_box_refine
+        super(DeformableDETR3DCamHeadTrackPlus, self).__init__()
         
         if 'code_size' in kwargs:
             self.code_size = kwargs['code_size']
         else:
-            self.code_size = 11
+            self.code_size = [6, 2, 3]
 
         self.pc_range = pc_range
 
@@ -88,27 +83,41 @@ class DeformableDETR3DCamRadarHeadTrack(nn.Module):
         cls_branch.append(Linear(self.embed_dims, self.cls_out_channels))
         fc_cls = nn.Sequential(*cls_branch)
 
+        # typically, xyz(inverse sigmoid space), wlh(gt_w.log())
         reg_branch = []
         for _ in range(self.num_reg_fcs):
             reg_branch.append(Linear(self.embed_dims, self.embed_dims))
             # reg_branch.append(nn.LayerNorm(self.embed_dims))
             reg_branch.append(nn.ReLU())
-        reg_branch.append(Linear(self.embed_dims, self.code_size))
+        reg_branch.append(Linear(self.embed_dims, self.code_size[0]))
         reg_branch = nn.Sequential(*reg_branch)
+
+        direction_branch = []
+        for _ in range(self.num_reg_fcs):
+            direction_branch.append(Linear(self.embed_dims, self.embed_dims))
+            # reg_branch.append(nn.LayerNorm(self.embed_dims))
+            direction_branch.append(nn.ReLU())
+        direction_branch.append(Linear(self.embed_dims, self.code_size[1]))
+        direction_branch = nn.Sequential(*direction_branch)
+
+        # branch for velocity prediction
+        velo_branch = []
+        for _ in range(self.num_reg_fcs):
+            velo_branch.append(Linear(self.embed_dims, self.embed_dims))
+            # reg_branch.append(nn.LayerNorm(self.embed_dims))
+            velo_branch.append(nn.ReLU())
+        velo_branch.append(Linear(self.embed_dims, self.code_size[2]))
+        velo_branch = nn.Sequential(*velo_branch)
 
         def _get_clones(module, N):
             return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
         num_pred = self.transformer.decoder.num_layers
 
-        if self.with_box_refine:
-            self.cls_branches = _get_clones(fc_cls, num_pred)
-            self.reg_branches = _get_clones(reg_branch, num_pred)
-        else:
-            self.cls_branches = nn.ModuleList(
-                [fc_cls for _ in range(num_pred)])
-            self.reg_branches = nn.ModuleList(
-                [reg_branch for _ in range(num_pred)])
+        self.cls_branches = _get_clones(fc_cls, num_pred)
+        self.reg_branches = _get_clones(reg_branch, num_pred)
+        self.direction_branches = _get_clones(direction_branch, num_pred)
+        self.velo_branches = _get_clones(velo_branch, num_pred)
         
         self.level_embeds = nn.Parameter(
             torch.Tensor(self.num_feature_levels, self.embed_dims))
@@ -119,7 +128,8 @@ class DeformableDETR3DCamRadarHeadTrack(nn.Module):
         """Initialize weights of the DeformDETR head."""
         self.transformer.init_weights()
 
-    def forward(self, mlvl_feats, radar_feats, query_embeds, ref_points, img_metas):
+    def forward(self, mlvl_feats, radar_feats,
+                query_embeds, ref_points, ref_size, img_metas):
         """Forward function.
         Args:
             mlvl_feats (tuple[Tensor]): List of Features from the upstream
@@ -130,6 +140,9 @@ class DeformableDETR3DCamRadarHeadTrack(nn.Module):
             ref_points (Tensor):  3d reference points associated with each query
                 shape (num_query, 3)
                 value is in inevrse sigmoid space
+            ref_size (Tensor): the size(bbox size) associated with each query
+                shape (num_query, 3)
+                value in log space. 
         Returns:
             all_cls_scores (Tensor): Outputs from the classification head, \
                 shape [nb_dec, bs, num_query, cls_out_channels]. Note \
@@ -169,11 +182,12 @@ class DeformableDETR3DCamRadarHeadTrack(nn.Module):
         # hs: features: (num_dec_layers, num_query, bs, embed_dims)
         # init_reference: (1, bs, num_query, 3)
         # inter_references: (num_dec_layers-1, bs, num_query, 3)
-        hs, init_reference, inter_references = self.transformer(
+        hs, inter_references, inter_box_sizes = self.transformer(
             mlvl_feats,
             query_embeds,
             ref_points,
-            reg_branches=self.reg_branches if self.with_box_refine else None,  # noqa:E501
+            ref_size,
+            reg_branches=self.reg_branches,
             img_metas=img_metas,
             radar_feats=radar_feats,
         )
@@ -185,30 +199,40 @@ class DeformableDETR3DCamRadarHeadTrack(nn.Module):
 
         for lvl in range(hs.shape[0]):
             if lvl == 0:
-                reference = init_reference
+                reference = ref_points.sigmoid()
+                ref_size_base = ref_size
             else:
                 reference = inter_references[lvl - 1]
+                ref_size_base = inter_box_sizes[lvl - 1]
             reference = inverse_sigmoid(reference)
             outputs_class = self.cls_branches[lvl](hs[lvl])
-            tmp = self.reg_branches[lvl](hs[lvl])
+            xywlzh = self.reg_branches[lvl](hs[lvl])
+            direction_pred = self.direction_branches[lvl](hs[lvl])
+            velo_pred = self.velo_branches[lvl](hs[lvl])
 
             # TODO: check the shape of reference
             assert reference.shape[-1] == 3
-            tmp[..., 0:2] += reference[..., 0:2]
-            tmp[..., 0:2] = tmp[..., 0:2].sigmoid()
-            tmp[..., 4:5] += reference[..., 2:3]
-            tmp[..., 4:5] = tmp[..., 4:5].sigmoid()
+            xywlzh[..., 0:2] += reference[..., 0:2]
+            xywlzh[..., 0:2] = xywlzh[..., 0:2].sigmoid()
+            xywlzh[..., 4:5] += reference[..., 2:3]
+            xywlzh[..., 4:5] = xywlzh[..., 4:5].sigmoid()
             last_ref_points = torch.cat(
-                [tmp[..., 0:2], tmp[..., 4:5]], dim=-1,
+                [xywlzh[..., 0:2], xywlzh[..., 4:5]], dim=-1,
             )
-            tmp[..., 0:1] = (tmp[..., 0:1] * (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0])
-            tmp[..., 1:2] = (tmp[..., 1:2] * (self.pc_range[4] - self.pc_range[1]) + self.pc_range[1])
-            tmp[..., 4:5] = (tmp[..., 4:5] * (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2])
-            
-            # TODO: check if using sigmoid
-            outputs_coord = tmp
+            xywlzh[..., 0:1] = (xywlzh[..., 0:1] *
+                (self.pc_range[3] - self.pc_range[0]) + self.pc_range[0])
+            xywlzh[..., 1:2] = (xywlzh[..., 1:2] *
+                (self.pc_range[4] - self.pc_range[1]) + self.pc_range[1])
+            xywlzh[..., 4:5] = (xywlzh[..., 4:5] *
+                (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2])
+
+            # TODO: Chose: Add in log. Add in exp.             
+            xywlzh[..., 2:4] = xywlzh[..., 2:4] + ref_size_base[..., 0:2]
+            xywlzh[..., 5:6] = xywlzh[..., 5:6] + ref_size_base[..., 2:3]
+
+            bbox_pred = torch.cat([xywlzh, direction_pred, velo_pred], dim=1)
             outputs_classes.append(outputs_class)
-            outputs_coords.append(outputs_coord)
+            outputs_coords.append(bbox_pred)
 
         outputs_classes = torch.stack(outputs_classes)
         outputs_coords = torch.stack(outputs_coords)

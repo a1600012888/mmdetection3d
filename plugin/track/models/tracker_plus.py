@@ -68,8 +68,8 @@ class RuntimeTrackerBase(object):
 
 
 @DETECTORS.register_module()
-class Detr3DCamRadarTracker(MVXTwoStageDetector):
-    """Base class of Multi-modality VoxelNet."""
+class Detr3DCamTrackerPlus(MVXTwoStageDetector):
+    """Tracker which support image w, w/o radar."""
 
     def __init__(self,
                  embed_dims=256,
@@ -111,7 +111,7 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
                  test_cfg=None,
                  pretrained=None,
                  ):
-        super(Detr3DCamRadarTracker,
+        super(Detr3DCamTrackerPlus,
               self).__init__(pts_voxel_layer, pts_voxel_encoder,
                              pts_middle_encoder, pts_fusion_layer,
                              img_backbone, pts_backbone, img_neck, pts_neck,
@@ -130,6 +130,7 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
             self.img_backbone.eval()
             self.img_neck.eval()
         self.reference_points = nn.Linear(self.embed_dims, 3)
+        self.bbox_size_fc = nn.Linear(self.embed_dims, 3)
         self.query_embedding = nn.Embedding(self.num_query,
                                             self.embed_dims * 2)
         self.mem_bank_len = 10
@@ -269,9 +270,12 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
         return img_feats_reshaped
 
     @auto_fp16(apply_to=('img'), out_fp32=True)
-    def extract_feat(self, points, img, radar, img_metas):
+    def extract_feat(self, points, img, radar=None, img_metas=None):
         """Extract features from images and points."""
-        radar_feats = self.radar_encoder(radar)
+        if radar is not None:
+            radar_feats = self.radar_encoder(radar)
+        else:
+            radar_feats = None
         if self.fix_feats:
             with torch.no_grad():
                 img_feats = self.extract_img_feat(img, img_metas)
@@ -296,6 +300,14 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
         track_instances.ref_pts = self.reference_points(
                             query[..., :dim // 2])
 
+        # init boxes: xy, wl, z, h, sin, cos, vx, vy, vz
+        box_sizes = self.bbox_size_fc(query[..., :dim // 2])
+        pred_boxes_init = torch.zeros(
+            (len(track_instances), 11), dtype=torch.float, device=device)
+        
+        pred_boxes_init[..., 2:4] = box_sizes[..., 0:2]
+        pred_boxes_init[..., 5:6] = box_sizes[..., 2:3]
+
         track_instances.query = query
 
         track_instances.output_embedding = torch.zeros(
@@ -312,8 +324,9 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
             (len(track_instances),), dtype=torch.float, device=device)
         track_instances.track_scores = torch.zeros(
             (len(track_instances),), dtype=torch.float, device=device)
-        track_instances.pred_boxes = torch.zeros(
-            (len(track_instances), 11), dtype=torch.float, device=device)
+        # xy, wl, z, h, sin, cos, vx, vy, vz
+        track_instances.pred_boxes = pred_boxes_init
+
         track_instances.pred_logits = torch.zeros(
             (len(track_instances), self.num_classes),
             dtype=torch.float, device=device)
@@ -381,18 +394,21 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
             no need to call velo update
         '''
         B, num_cam, _, H, W = img.shape
-        img_feats, radar_feats, pts_feats = self.extract_feat(points, img=img,
-                                                 radar=radar,
-                                                 img_metas=img_metas)
+        img_feats, radar_feats, pts_feats = self.extract_feat(
+            points, img=img, radar=radar, img_metas=img_metas)
         # img_feats = [a.clone() for a in img_feats]
 
         # output_classes: [num_dec, B, num_query, num_classes]
         # query_feats: [B, num_query, embed_dim]
 
+        ref_box_sizes = torch.cat(
+            [track_instances.pred_boxes[:, 2:4],
+             track_instances.pred_boxes[:, 5:6]], dim=1)
+        
         output_classes, output_coords, \
             query_feats, last_ref_pts = self.pts_bbox_head(
                 img_feats, radar_feats, track_instances.query,
-                track_instances.ref_pts, img_metas,)
+                track_instances.ref_pts, ref_box_sizes, img_metas,)
 
         out = {'pred_logits': output_classes[-1],
                'pred_boxes': output_coords[-1],
@@ -590,18 +606,20 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
         track_instances = Instances.cat([other_inst, active_inst])
 
         B, num_cam, _, H, W = img.shape
-        img_feats, radar_feats, pts_feats = self.extract_feat(points, img=img,
-                                                 radar=radar,
-                                                 img_metas=img_metas)
+        img_feats, radar_feats, pts_feats = self.extract_feat(
+            points, img=img, radar=radar, img_metas=img_metas)
         img_feats = [a.clone() for a in img_feats]
 
         # output_classes: [num_dec, B, num_query, num_classes]
         # query_feats: [B, num_query, embed_dim]
+        ref_box_sizes = torch.cat(
+            [track_instances.pred_boxes[:, 2:4],
+             track_instances.pred_boxes[:, 5:6]], dim=1)
 
         output_classes, output_coords, \
             query_feats, last_ref_pts = self.pts_bbox_head(
                 img_feats, radar_feats, track_instances.query,
-                track_instances.ref_pts, img_metas,)
+                track_instances.ref_pts, ref_box_sizes, img_metas,)
 
         out = {'pred_logits': output_classes[-1],
                'pred_boxes': output_coords[-1],

@@ -51,7 +51,7 @@ class ClipMatcher(nn.Module):
     def __init__(self, 
                  num_classes,
                  weight_dict,
-                 code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2], 
+                 code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2], 
                  assigner=dict(
                      type='HungarianAssigner3D',
                      cls_cost=dict(type='FocalLossCost', weight=2.0),
@@ -186,6 +186,7 @@ class ClipMatcher(nn.Module):
         avg_factor = src_boxes[mask].size(0)
         avg_factor = reduce_mean(
                 target_boxes.new_tensor([avg_factor]))
+        
         loss_bbox = self.loss_bboxes(src_boxes[mask], target_boxes[mask],
                                      bbox_weights[mask],
                                      avg_factor=avg_factor.item())

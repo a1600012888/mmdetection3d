@@ -223,30 +223,28 @@ class Detr3DCamPlusSparseAttenTrack(BaseModule):
         attention_weights = attention_weights.view(
             bs, num_query, self.num_heads, 1, self.num_cams, self.num_points, self.num_levels)
         
-        offsets = self.offsets(query).view(bs, -1, 3)
+        offsets = self.offsets(query).view(bs, num_query, -1, 3)
 
         # should add orientation.  whl - xyz in lidar
-        offsets = offsets.tanh() * ref_size.exp() / 2.0
+        offsets = offsets.tanh() * ((ref_size.exp()).unsqueeze(dim=2) / 2.0)
         offsets = offsets.view(
             bs, 1, num_query, 1, self.num_heads, self.num_points, 3)
         # shape [B, num_cam, num_query, num_level, num_heads, num_points, 3]
         offsets = offsets.repeat(1, self.num_cams, 1, self.num_levels, 1, 1, 1)
 
-        reference_points_3d, output, mask = feature_sampling(
-            value, reference_points, offsets, self.pc_range, kwargs['img_metas'])
+        output, mask = feature_sampling(
+            value_proj_list, reference_points, offsets, self.pc_range, kwargs['img_metas'])
         output = torch.nan_to_num(output)
         mask = torch.nan_to_num(mask)
 
-        # attention_weights = attention_weights.view(bs, 1, num_query, self.num_cams * self.num_levels)
-        # attention_weights = attention_weights.softmax(-1)
-        # attention_weights = attention_weights.view(bs, 1, num_query, self.num_cams, self.num_levels)
-
         attention_weights = self.weight_dropout(attention_weights.sigmoid()) * mask
+        # [B, num_query, num_heads, dim_per_head]
         output = output * attention_weights
-        output = output.sum(-1).sum(-1).sum(-1)
-        # from (bs, embed_dims, num_query)
-        # to (num_query, bs, embed_dims)
-        output = output.permute(2, 0, 1)
+        output = output.sum(-1).sum(-1).sum(-1) / (attention_weights.sum(-1).sum(-1).sum(-1).sum(-1, keepdim=True) + 1e-7)
+        
+        output = torch.flatten(output, 2, 3)
+        # [bs, num_query, C] => [num_query, bs, C]
+        output = output.permute(1, 0, 2)
         
         # [B, M, radar_dim], [B, M,]
         
@@ -300,7 +298,7 @@ class Detr3DCamPlusSparseAttenTrack(BaseModule):
         output = torch.cat((output, radar_out), dim=-1)
         output = self.output_proj(output)
         # (num_query, bs, embed_dims)
-        return self.dropout(output) + inp_residual + self.pos_encoder(inverse_sigmoid(reference_points_3d)).permute(1, 0, 2)
+        return self.dropout(output) + inp_residual + self.pos_encoder(inverse_sigmoid(reference_points)).permute(1, 0, 2)
 
 
 def feature_sampling(mlvl_feats, reference_points, offsets, pc_range, img_metas):
@@ -350,8 +348,9 @@ def feature_sampling(mlvl_feats, reference_points, offsets, pc_range, img_metas)
     reference_points_cam = torch.matmul(lidar2img, reference_points).squeeze(-1)
     mask = (reference_points_cam[..., 2:3] > 0)
     reference_points_cam = reference_points_cam[..., 0:2] / torch.clamp(reference_points_cam[..., 2:3], min=1e-5)
-    reference_points_cam[..., 0] /= img_metas[0]['pad_shape'][0][1]
-    reference_points_cam[..., 1] /= img_metas[0]['pad_shape'][0][0]
+    
+    reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][0][1]
+    reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0][0]
     reference_points_cam = (reference_points_cam - 0.5) * 2
     # [B, num_cam, num_query, num_level, num_heads, num_points, 1]
     mask = (mask & (reference_points_cam[..., 0:1] > -1.0)

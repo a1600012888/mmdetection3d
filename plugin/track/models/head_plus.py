@@ -8,7 +8,7 @@ from mmcv.runner import force_fp32
                         
 from mmdet.models.utils.transformer import inverse_sigmoid
 from mmdet.models import HEADS
-
+from mmcv.runner import force_fp32, auto_fp16
 from mmcv.cnn import Linear, build_activation_layer
 from mmcv.cnn.bricks.transformer import build_positional_encoding
 from mmdet.models.utils import build_transformer
@@ -128,6 +128,7 @@ class DeformableDETR3DCamHeadTrackPlus(nn.Module):
         """Initialize weights of the DeformDETR head."""
         self.transformer.init_weights()
 
+    @auto_fp16(apply_to=('img', 'radar'))
     def forward(self, mlvl_feats, radar_feats,
                 query_embeds, ref_points, ref_size, img_metas):
         """Forward function.
@@ -230,7 +231,7 @@ class DeformableDETR3DCamHeadTrackPlus(nn.Module):
             xywlzh[..., 2:4] = xywlzh[..., 2:4] + ref_size_base[..., 0:2]
             xywlzh[..., 5:6] = xywlzh[..., 5:6] + ref_size_base[..., 2:3]
 
-            bbox_pred = torch.cat([xywlzh, direction_pred, velo_pred], dim=1)
+            bbox_pred = torch.cat([xywlzh, direction_pred, velo_pred], dim=2)
             outputs_classes.append(outputs_class)
             outputs_coords.append(bbox_pred)
 

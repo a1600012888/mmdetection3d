@@ -151,7 +151,7 @@ class Detr3DCamTrackTransformer(BaseModule):
                  decoder=None,
                  reference_points_aug=False,
                  **kwargs):
-        super(Detr3DCamTransformerPlus, self).__init__(**kwargs)
+        super(Detr3DCamTrackTransformer, self).__init__(**kwargs)
         self.decoder = build_transformer_layer_sequence(decoder)
         self.embed_dims = self.decoder.embed_dims
         self.num_feature_levels = num_feature_levels
@@ -319,7 +319,7 @@ class Detr3DCamTrackPlusTransformerDecoder(TransformerLayerSequence):
 
                 # add in log space
                 ref_size = ref_size + ref_size_update
-                ref_size = ref_size.detach(),
+                ref_size = ref_size.detach()
 
             output = output.permute(1, 0, 2)
             if self.return_intermediate:

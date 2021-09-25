@@ -128,7 +128,7 @@ class DeformableDETR3DCamHeadTrackPlus(nn.Module):
         """Initialize weights of the DeformDETR head."""
         self.transformer.init_weights()
 
-    @auto_fp16(apply_to=('img', 'radar'))
+    #@auto_fp16(apply_to=('img', 'radar'))
     def forward(self, mlvl_feats, radar_feats,
                 query_embeds, ref_points, ref_size, img_metas):
         """Forward function.

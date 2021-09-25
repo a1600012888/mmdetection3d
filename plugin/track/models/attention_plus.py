@@ -113,8 +113,8 @@ class Detr3DCamPlusSparseAttenTrack(BaseModule):
         self.attention_weights = nn.Linear(embed_dims,
                                            num_cams*num_heads*num_points*num_levels)
         self.offsets = nn.Linear(embed_dims, num_heads*num_points*3)
-        self.value_proj = nn.Linear(embed_dims,
-                                    embed_dims)
+        #self.value_proj = nn.Linear(embed_dims,
+        #                            embed_dims)
 
         self.output_proj = nn.Sequential(
             nn.Linear(embed_dims+radar_dims, embed_dims), 
@@ -137,9 +137,10 @@ class Detr3DCamPlusSparseAttenTrack(BaseModule):
     def init_weight(self):
         """Default initialization for Parameters of Module."""
         constant_init(self.attention_weights, val=0., bias=0.)
+        #constant_init(self.offsets, 0.)
         xavier_init(self.offsets, distribution='uniform', bias=0.)
         xavier_init(self.output_proj, distribution='uniform', bias=0.)
-        xavier_init(self.value_proj, distribution='uniform', bias=0.)
+        #xavier_init(self.value_proj, distribution='uniform', bias=0.)
         xavier_init(self.pos_encoder, distribution='uniform', bias=0.)
 
     def forward(self,
@@ -204,7 +205,8 @@ class Detr3DCamPlusSparseAttenTrack(BaseModule):
             _B, _N, _C, _H, _W = feat.shape
             # feat: [B, N, C, H, W] => [B, N, H, W, C]
             value_flat = feat.permute(0, 1, 3, 4, 2)
-            value_flat_proj = self.value_proj(value_flat)
+            #value_flat_proj = self.value_proj(value_flat)
+            value_flat_proj = value_flat
 
             # [B, N, H, W, num_heads, dim_per_head]
             value_flat_proj = value_flat_proj.view(_B, _N, _H, _W, self.num_heads, -1)

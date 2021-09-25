@@ -269,7 +269,7 @@ class Detr3DCamTrackerPlus(MVXTwoStageDetector):
             img_feats_reshaped.append(img_feat.view(B, int(BN / B), C, H, W))
         return img_feats_reshaped
 
-    @auto_fp16(apply_to=('img'), out_fp32=False)
+    @auto_fp16(apply_to=('img'), out_fp32=True)
     def extract_feat(self, points, img, radar=None, img_metas=None):
         """Extract features from images and points."""
         if radar is not None:
@@ -382,7 +382,7 @@ class Detr3DCamTrackerPlus(MVXTwoStageDetector):
         else:
             return self.forward_test(**kwargs)
 
-    @auto_fp16(apply_to=('img', 'radar'))
+    #@auto_fp16(apply_to=('img', 'radar'))
     def _forward_single(self, points, img, radar, img_metas, track_instances,
                         l2g_r1=None, l2g_t1=None, l2g_r2=None, l2g_t2=None,
                         time_delta=None):

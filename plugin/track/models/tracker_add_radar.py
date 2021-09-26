@@ -524,7 +524,8 @@ class Detr3DCamRadarTracker(MVXTwoStageDetector):
             l2g_t1 = l2g_t[i]
             g2l_r2 = torch.linalg.inv(l2g_r2 + 1e-5).type(torch.float)
 
-            velo = velo_pad - (l2g_t2 - l2g_t1) - x @ (l2g_r2 - l2g_r1)
+            velo = velo_pad @ l2g_r1 - (l2g_t2 - l2g_t1) - \
+                x @ (l2g_r2 - l2g_r1 + 1e-5)
             velo = velo @ g2l_r2
             # velo = velo[..., 0:2]
 

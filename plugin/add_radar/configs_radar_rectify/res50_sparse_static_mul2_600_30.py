@@ -320,8 +320,8 @@ optimizer = dict(
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
-            #'offsets': dict(lr_mult=0.1),
-            #'reference_points': dict(lr_mult=0.1)
+            'offsets': dict(lr_mult=0.1),
+            'reference_points': dict(lr_mult=0.1)
         }),
     weight_decay=0.01)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))

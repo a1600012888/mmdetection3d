@@ -156,6 +156,7 @@ class LoadRadarPoints(object):
         return f'{self.__class__.__name__}(sweeps_num={self.sweeps_num})'
 
 
+
 @PIPELINES.register_module()
 class LoadRadarPointsMultiSweeps(object):
     """Load radar points from multiple sweeps.
@@ -283,12 +284,14 @@ class LoadRadarPointsMultiSweeps(object):
                 velo_comp = np.concatenate(
                     (velo_comp, np.zeros((velo_comp.shape[0], 1))), 1)
                 velo_comp = velo_comp @ sweep['sensor2lidar_rotation'].T
+                velo_comp = velo_comp[:, :2]
 
                 # velocity in sensor frame
                 velo = points_sweep[:, 6:8]
                 velo = np.concatenate(
                     (velo, np.zeros((velo.shape[0], 1))), 1)
                 velo = velo @ sweep['sensor2lidar_rotation'].T
+                velo = velo[:, :2]
 
                 points_sweep[:, :3] = points_sweep[:, :3] @ sweep[
                     'sensor2lidar_rotation'].T
@@ -296,7 +299,7 @@ class LoadRadarPointsMultiSweeps(object):
 
                 points_sweep_ = np.concatenate(
                     [points_sweep[:, :6], velo,
-                     velo_comp, points_sweep[:, 10:], 
+                     velo_comp, points_sweep[:, 10:],
                      time_diff], axis=1)
                 points_sweep_list.append(points_sweep_)
         
@@ -316,7 +319,7 @@ class LoadRadarPointsMultiSweeps(object):
         
         points = np.concatenate((points, mask), axis=-1)
 
-        results['radar'] = points
+        results['radar'] = points.astype(np.float32)
         return results
 
     def __repr__(self):

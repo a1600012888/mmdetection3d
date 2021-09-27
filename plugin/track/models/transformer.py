@@ -318,6 +318,7 @@ class Detr3DCamTrackPlusTransformerDecoder(TransformerLayerSequence):
                 reference_points = new_reference_points.detach()
 
                 # add in log space
+                # ref_size = (ref_size.exp() + ref_size_update.exp()).log()
                 ref_size = ref_size + ref_size_update
                 ref_size = ref_size.detach()
 

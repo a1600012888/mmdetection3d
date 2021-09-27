@@ -49,7 +49,7 @@ model = dict(
     ),
     radar_encoder=dict(
         type='RadarPointEncoderXY',
-        in_channels=10,
+        in_channels=13,
         out_channels=[32, 64],
         norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01),),
     img_backbone=dict(
@@ -142,7 +142,7 @@ model = dict(
         gaussian_overlap=0.1,
         max_objs=500,
         min_radius=2,
-        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2],
+        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2],
         assigner=dict(
             type='HungarianAssigner3D',
             cls_cost=dict(type='FocalLossCost', weight=2.0),
@@ -164,7 +164,7 @@ model = dict(
         nms_thr=0.2))
 
 # x y z rcs vx_comp vy_comp x_rms y_rms vx_rms vy_rms
-radar_use_dims = [0, 1, 2, 5, 8, 9, 12, 13, 16, 17]
+radar_use_dims = [0, 1, 2, 5, 6, 7, 8, 9, 12, 13, 16, 17, 18]
 dataset_type = 'NuScenesTrackDatasetRadar'
 data_root = 'data/nuscenes/'
 
@@ -259,7 +259,7 @@ optimizer = dict(
             'reference_points': dict(lr_mult=0.1)
         }),
     weight_decay=0.01)
-optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=105, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
@@ -274,6 +274,6 @@ runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'
-load_from = 'work_dirs/models/f1_23ep.pth'
+load_from = 'work_dirs/models/backbone_neck.pth'
 
 #fp16 = dict(loss_scale='dynamic')

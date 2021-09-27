@@ -228,6 +228,10 @@ class DeformableDETR3DCamHeadTrackPlus(nn.Module):
                 (self.pc_range[5] - self.pc_range[2]) + self.pc_range[2])
 
             # TODO: Chose: Add in log. Add in exp.             
+            # add in exp
+            # xywlzh[..., 2:4] = (xywlzh[..., 2:4].exp() + ref_size_base[..., 0:2].exp()).log()
+            # xywlzh[..., 5:6] = (xywlzh[..., 5:6].exp() + ref_size_base[..., 2:3].exp()).log()
+            # add in log
             xywlzh[..., 2:4] = xywlzh[..., 2:4] + ref_size_base[..., 0:2]
             xywlzh[..., 5:6] = xywlzh[..., 5:6] + ref_size_base[..., 2:3]
 

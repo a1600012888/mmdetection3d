@@ -193,9 +193,9 @@ def main():
     if rank == 0:
         if args.out:
             print(f'\nwriting results to {args.out}')
-            mmcv.dump(outputs, args.out)
+            
+            dataset._format_bbox(outputs, jsonfile_prefix=args.out)
         
-
 
 if __name__ == '__main__':
     main()

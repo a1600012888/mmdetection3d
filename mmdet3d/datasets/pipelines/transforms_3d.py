@@ -370,9 +370,9 @@ class GlobalRotScaleTrans(object):
                     noise_rotation, input_dict['points'])
                 input_dict['points'] = points
                 input_dict['pcd_rotation'] = rot_mat_T
-                rot_mat_T_np = np.eye(4)
-                rot_mat_T_np[:3, :3] = rot_mat_T.numpy()
-                input_dict['lidar2img'] = input_dict['lidar2img'] @ rot_mat_T_np
+                #rot_mat_T_np = np.eye(4)
+                #rot_mat_T_np[:3, :3] = rot_mat_T.numpy()
+                #input_dict['lidar2img'] = input_dict['lidar2img'] @ rot_mat_T_np
         # input_dict['points_instance'].rotate(noise_rotation)
 
     def _scale_bbox_points(self, input_dict):
@@ -1127,7 +1127,9 @@ class Pad3D(object):
 
     def _pad_img(self, results):
         """Pad images according to ``self.size``."""
+        #padded_img = []
         for key in results.get('img_fields', ['img']):
+            #print(key)
             if self.size is not None:
                 padded_img = mmcv.impad(
                     results[key], shape=self.size, pad_val=self.pad_val)
@@ -1136,6 +1138,7 @@ class Pad3D(object):
                     img, self.size_divisor, pad_val=self.pad_val) for img in results[key]]
             results[key] = padded_img
         results['img_shape'] = [img.shape for img in padded_img]
+        #print('img_shape', results['img_shape'])
         results['img_fixed_size'] = self.size
         results['img_size_divisor'] = self.size_divisor
 
@@ -1159,7 +1162,9 @@ class Pad3D(object):
         Returns:
             dict: Updated result dict.
         """
+        #print(results['points'].size())
         self._pad_img(results)
+        #print(results['points'].size())
         self._pad_masks(results)
         self._pad_seg(results)
         return results

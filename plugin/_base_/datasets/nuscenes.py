@@ -334,14 +334,14 @@ class NuScenesDataset2(Custom3DDataset):
                     elif name in ['bicycle', 'motorcycle']:
                         attr = 'cycle.with_rider'
                     else:
-                        attr = NuScenesDataset.DefaultAttribute[name]
+                        attr = NuScenesDataset2.DefaultAttribute[name]
                 else:
                     if name in ['pedestrian']:
                         attr = 'pedestrian.standing'
                     elif name in ['bus']:
                         attr = 'vehicle.stopped'
                     else:
-                        attr = NuScenesDataset.DefaultAttribute[name]
+                        attr = NuScenesDataset2.DefaultAttribute[name]
 
                 nusc_anno = dict(
                     sample_token=sample_token,

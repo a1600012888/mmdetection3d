@@ -425,11 +425,12 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     # ref_point_cam change to img coordinates
     reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(
         reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)
+    # img_metas['img_shape']=[900, 1600]
     reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
     reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
     reference_points_cam = (reference_points_cam - 0.5) * 2
-    mask = (mask & (reference_points_cam[..., 0:1] > -1.0) 
-                 & (reference_points_cam[..., 0:1] < 1.0) 
+    mask = (mask & (reference_points_cam[..., 0:1] > -1.0)
+                 & (reference_points_cam[..., 0:1] < 1.0)
                  & (reference_points_cam[..., 1:2] > -1.0) 
                  & (reference_points_cam[..., 1:2] < 1.0))
     # mask shape (B, 1, num_query, num_cam, 1, 1)

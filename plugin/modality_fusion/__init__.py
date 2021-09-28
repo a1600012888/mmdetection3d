@@ -10,3 +10,7 @@ from .transformer_point import Detr3DCamTransformerPoint, Detr3DCamTransformerDe
 from .sec_fpn import SECONDFPNv2
 from .attention_offset import Detr3DCamCrossAttenPointOffset
 from .tensorboard import TensorboardLoggerHookv2
+from .detr_img_head import DeformableDETR3DCamHeadV2
+from .attention_img import Detr3DCamCrossAttenImg
+from .._base_.datasets.nuscenes_val import NuScenesDatasetVal
+from .data_aug import PhotoMetricDistortion3D

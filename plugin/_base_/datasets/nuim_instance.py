@@ -1,4 +1,4 @@
-dataset_type = 'CocoDataset'
+dataset_type = 'CocoDatasetv2'
 data_root = 'data/nuimages/'
 class_names = [
     'car', 'truck', 'trailer', 'bus', 'construction_vehicle', 'bicycle',

@@ -166,7 +166,7 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         Returns:
             dict: Losses of different branches.
         """
-        
+        # img [N, 3, 928, 1600]
         img_feats, pts_feats = self.extract_feat(points, img=img, img_metas=img_metas)
         losses = dict()
         pts_feats = [feat.unsqueeze(dim=1) for feat in pts_feats]

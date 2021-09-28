@@ -331,7 +331,7 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[36, 39])
+    step=[21, 24])
 
 '''
 lr_config = dict(
@@ -347,11 +347,11 @@ momentum_config = dict(
     step_ratio_up=0.4,
 )
 '''
-total_epochs = 40
-evaluation = dict(interval=4, pipeline=eval_pipeline)
+total_epochs = 25
+evaluation = dict(interval=5, pipeline=eval_pipeline)
 
-runner = dict(type='EpochBasedRunner', max_epochs=40)
+runner = dict(type='EpochBasedRunner', max_epochs=25)
 
 find_unused_parameters = False
 
-#load_from = '/public/MARS/models/surrdet/points_model/centerpoint_01voxel_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201001_135205-5db91e00.pth'
+load_from = '/home/chenxy/mmdetection3d/work_dirs/centerpoint_pointonly_01voxel_q6_dataaug_step_20e/epoch_15.pth'

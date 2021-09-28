@@ -355,4 +355,4 @@ find_unused_parameters = True
         with_voxel_center=True,
         point_cloud_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
         norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01)),
-'''True
+'''

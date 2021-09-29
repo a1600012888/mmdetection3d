@@ -89,6 +89,8 @@ train_pipeline = [
         file_client_args=file_client_args,
         pad_empty_sweeps=True,
         remove_close=True),
+    dict(
+        type='ReduceLiDARBeams'),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
     dict(type='PaintedObjectSample', db_sampler=db_sampler),
     dict(
@@ -118,7 +120,6 @@ test_pipeline = [
     dict(
         type='LoadPaintedPointsFromMultiSweeps',
         sweeps_num=9,
-        load_dim=15,
         use_dim=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
         file_client_args=file_client_args,
         pad_empty_sweeps=True,

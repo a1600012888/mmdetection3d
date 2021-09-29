@@ -9,3 +9,4 @@ from .loading import (LoadPointsFromFilev2, LoadPointsFromMultiSweepsv2,
             LoadPaintedPointsFromMultiSweeps, DataBaseSamplerPainted,
             PaintedObjectSample)
 from .nuscenesv2 import NuScenesDatasetv2
+from .reduceLidarBeams import ReduceLiDARBeams

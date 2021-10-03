@@ -316,11 +316,12 @@ class Detr3DCamTrackPlusTransformerDecoder(TransformerLayerSequence):
                     inverse_sigmoid(reference_points)
                 new_reference_points = new_reference_points.sigmoid()
                 reference_points = new_reference_points.detach()
-
+                
                 # add in log space
                 # ref_size = (ref_size.exp() + ref_size_update.exp()).log()
                 ref_size = ref_size + ref_size_update
-                ref_size = ref_size.detach()
+                if lid > 0:
+                    ref_size = ref_size.detach()
 
             output = output.permute(1, 0, 2)
             if self.return_intermediate:

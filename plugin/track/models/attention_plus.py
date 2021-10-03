@@ -137,8 +137,8 @@ class Detr3DCamPlusSparseAttenTrack(BaseModule):
     def init_weight(self):
         """Default initialization for Parameters of Module."""
         constant_init(self.attention_weights, val=0., bias=0.)
-        #constant_init(self.offsets, 0.)
-        xavier_init(self.offsets, distribution='uniform', bias=0.)
+        constant_init(self.offsets, 0.)
+        # xavier_init(self.offsets, distribution='uniform', bias=0.)
         xavier_init(self.output_proj, distribution='uniform', bias=0.)
         #xavier_init(self.value_proj, distribution='uniform', bias=0.)
         xavier_init(self.pos_encoder, distribution='uniform', bias=0.)
@@ -228,7 +228,8 @@ class Detr3DCamPlusSparseAttenTrack(BaseModule):
         offsets = self.offsets(query).view(bs, num_query, -1, 3)
 
         # should add orientation.  whl - xyz in lidar
-        offsets = offsets.tanh() * ((ref_size.exp()).unsqueeze(dim=2) / 2.0)
+        ref_size = ref_size.detach()
+        offsets = offsets * ((ref_size.exp()).unsqueeze(dim=2) / 2.0) / self.num_points
         offsets = offsets.view(
             bs, 1, num_query, 1, self.num_heads, self.num_points, 3)
         # shape [B, num_cam, num_query, num_level, num_heads, num_points, 3]
@@ -310,17 +311,11 @@ def feature_sampling(mlvl_feats, reference_points, offsets, pc_range, img_metas)
     offsets: [B, num_cam, num_query, num_level, num_heads, num_points, 3] in raw space
     '''
     lidar2img = []
-    img_flip = []
     for img_meta in img_metas:
         lidar2img.append(img_meta['lidar2img'])
-        if 'img_flip' in img_metas:
-            img_flip.append(img_meta['img_flip'])
-        else:
-            img_flip.append(np.zeros((6,)))
     lidar2img = np.asarray(lidar2img)
-    img_flip = np.asarray(img_flip)
-    lidar2img = reference_points.new_tensor(lidar2img) # (B, N, 4, 4)
-    img_flip = reference_points.new_tensor(img_flip) # (B, N)
+    lidar2img = reference_points.new_tensor(lidar2img)  # (B, N, 4, 4)
+    
     #reference_points = reference_points.clone() # (B, num_query, 3)
 
     reference_points = inverse_sigmoid(reference_points)
@@ -364,8 +359,6 @@ def feature_sampling(mlvl_feats, reference_points, offsets, pc_range, img_metas)
     #mask = mask.view(B, num_cam, 1, num_query, 1, 1).permute(0, 2, 3, 1, 4, 5)
     sampled_feats = []
 
-    img_flip = img_flip.view(B, num_cam, 1, 1, 1)
-
     for lvl, feat in enumerate(mlvl_feats):
         B, _num_cam, H, W, _num_heads, dim_per_head, = feat.size()
         # [B, num_cam, num_heads, dim_per_head, H, W]
@@ -386,9 +379,9 @@ def feature_sampling(mlvl_feats, reference_points, offsets, pc_range, img_metas)
 
         # [B * num_cam * num_heads, dim_per_head, num_query, num_points]
         sampled_feat = F.grid_sample(feat, reference_points_cam_lvl,
-                                    mode='bilinear',
-                                    padding_mode='zeros',
-                                    align_corners=False)
+                                     mode='bilinear',
+                                     padding_mode='zeros',
+                                     align_corners=False)
 
         # [B, num_cam, num_heads, dim_per_head, num_query, num_points]
         sampled_feat = sampled_feat.unflatten(0, (B, num_cam, num_heads))

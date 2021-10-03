@@ -275,6 +275,6 @@ runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'
-load_from = 'work_dirs/models/backbone_neck.pth'
+load_from = 'work_dirs/track/lidar_velo/rdar_cam_xywlzh_12ep_fix_radar_attn_notanh_detach/latest.pth'
 
 #fp16 = dict(loss_scale='dynamic')

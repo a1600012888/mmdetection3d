@@ -64,7 +64,8 @@ class Detr3DCamCrossAttenTrack(BaseModule):
                  dropout=0.1,
                  weight_dropout=0.0,
                  norm_cfg=None,
-                 init_cfg=None):
+                 init_cfg=None,
+                 **kwargs):
         super(Detr3DCamCrossAttenTrack, self).__init__(init_cfg)
         if embed_dims % num_heads != 0:
             raise ValueError(f'embed_dims must be divisible by num_heads, '
@@ -234,7 +235,8 @@ class Detr3DCamRadarSparseAttenTrack(BaseModule):
                  dropout=0.1,
                  weight_dropout=0.0,
                  norm_cfg=None,
-                 init_cfg=None):
+                 init_cfg=None,
+                 **kwargs):
         super(Detr3DCamRadarSparseAttenTrack, self).__init__(init_cfg)
         if embed_dims % num_heads != 0:
             raise ValueError(f'embed_dims must be divisible by num_heads, '

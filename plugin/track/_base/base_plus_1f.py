@@ -18,9 +18,9 @@ class_names = [
 ]
 
 input_modality = dict(
-    use_lidar=True,
+    use_lidar=False,
     use_camera=True,
-    use_radar=False,
+    use_radar=True,
     use_map=False,
     use_external=False)
 
@@ -33,7 +33,7 @@ model = dict(
         type='DETRTrack3DCoder',
         post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
         pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
-        max_num=50,
+        max_num=100,
         num_classes=7),
     fix_feats=False,
     score_thresh=0.4,
@@ -41,7 +41,7 @@ model = dict(
     qim_args=dict(
         qim_type='QIMBase',
         merger_dropout=0, update_query_pos=True,
-        fp_ratio=0.2, random_drop=0.1),
+        fp_ratio=0.3, random_drop=0.1),
     mem_cfg=dict(
         memory_bank_type='MemoryBank',
         memory_bank_score_thresh=0.0,
@@ -56,7 +56,7 @@ model = dict(
         type='ResNet',
         with_cp=False,
         #with_cp=True,
-        #pretrained='open-mmlab://detectron2/resnet50_caffe',
+        pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -260,7 +260,7 @@ optimizer = dict(
             'reference_points': dict(lr_mult=0.1)
         }),
     weight_decay=0.01)
-optimizer_config = dict(grad_clip=dict(max_norm=105, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
@@ -275,6 +275,6 @@ runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'
-load_from = 'work_dirs/models/backbone_neck.pth'
+#load_from = 'work_dirs/models/backbone_neck.pth'
 
 #fp16 = dict(loss_scale='dynamic')

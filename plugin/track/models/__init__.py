@@ -5,6 +5,8 @@ from .tracker_plus import Detr3DCamTrackerPlus
 from .head import DeformableDETR3DCamHeadTrack
 from .head_add_radar import DeformableDETR3DCamRadarHeadTrack
 from .head_plus import DeformableDETR3DCamHeadTrackPlus
+from .membank_head import DeformableDETR3DCamHeadTrackPlusMem
+from .tracker_mem_in_head import Detr3DCamTrackerPlusMeminHead
 from .loss import ClipMatcher
 from .transformer import (Detr3DCamTransformerPlus,
                           Detr3DCamTrackPlusTransformerDecoder,

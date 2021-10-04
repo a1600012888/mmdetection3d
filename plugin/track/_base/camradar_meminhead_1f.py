@@ -25,7 +25,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamTrackerPlus',
+    type='Detr3DCamTrackerPlusMeminHead',
     use_grid_mask=True,  # use grid mask
     num_classes=7,
     num_query=300,
@@ -50,13 +50,13 @@ model = dict(
     radar_encoder=dict(
         type='RadarPointEncoderXY',
         in_channels=13,
-        out_channels=[32, 64],
+        out_channels=[32, 32, 64],
         norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01),),
     img_backbone=dict(
         type='ResNet',
         with_cp=False,
         #with_cp=True,
-        #pretrained='open-mmlab://detectron2/resnet50_caffe',
+        pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -94,7 +94,7 @@ model = dict(
         norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamHeadTrackPlus',
+        type='DeformableDETR3DCamHeadTrackPlusMem',
         num_classes=7,
         in_channels=256,
         num_cams=6,
@@ -120,7 +120,7 @@ model = dict(
                             num_points=4,
                             num_heads=8,
                             embed_dims=256,
-                            radar_topk=10,
+                            radar_topk=30,
                             radar_dims=64)
                     ],
                     feedforward_channels=512,
@@ -227,7 +227,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=3,
+            num_frames_per_sample=1,
             data_root=data_root,
             ann_file=data_root + 'track_radar_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -273,8 +273,8 @@ evaluation = dict(interval=2)
 
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 
-find_unused_parameters = True
-#load_from = 'work_dirs/track/2t/latest.pth'
-load_from = 'work_dirs/track/lidar_velo/rdar_cam_xywlzh_12ep_fix_radar_attn_notanh_detach/latest.pth'
+find_unused_parameters = False
+load_from = 'work_dirs/models/backbone_neck.pth'
+#load_from = 'work_dirs/track/lidar_velo/rdar_cam_xywlzh_12ep_fix_radar_attn_notanh_detach/latest.pth'
 
 #fp16 = dict(loss_scale='dynamic')

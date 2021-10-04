@@ -28,7 +28,7 @@ model = dict(
     use_grid_mask=True, # use grid mask
     img_backbone=dict(
         type='ResNet',
-        with_cp=True,
+        with_cp=False,
         pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
@@ -316,7 +316,7 @@ data = dict(
 
 optimizer = dict(
     type='AdamW',
-    lr=2e-4,
+    lr=1e-4,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
@@ -331,11 +331,11 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[8, 11])
-total_epochs = 12
+    step=[20, 23])
+total_epochs = 24
 evaluation = dict(interval=2, pipeline=eval_pipeline)
 
-runner = dict(type='EpochBasedRunner', max_epochs=12)
+runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = False
-load_from='work_dirs/models/radar_res50_det.pth'
+load_from='work_dirs/radar_det/res50_baseline/epoch_12.pth'

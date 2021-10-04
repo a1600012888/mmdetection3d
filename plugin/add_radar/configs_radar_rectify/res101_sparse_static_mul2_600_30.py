@@ -338,4 +338,4 @@ evaluation = dict(interval=2, pipeline=eval_pipeline)
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = False
-#load_from='work_dirs/models/fcos3d.pth'
+load_from='/public/MARS/models/surrdet/image_models/detrcam_3ddet_fcos3d_pre_24ep.pth'

@@ -5,7 +5,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from mmcv.cnn import Linear
 from mmcv.runner import force_fp32
-                        
+from mmcv.cnn import Linear, bias_init_with_prob, constant_init
+from torch.nn.init import normal_
+
 from mmdet.models.utils.transformer import inverse_sigmoid
 from mmdet.models import HEADS
 from mmcv.runner import force_fp32, auto_fp16
@@ -127,6 +129,12 @@ class DeformableDETR3DCamHeadTrackPlus(nn.Module):
     def init_weights(self):
         """Initialize weights of the DeformDETR head."""
         self.transformer.init_weights()
+        normal_(self.level_embeds)
+        normal_(self.cam_embeds)
+    
+        bias_init = bias_init_with_prob(0.01)
+        for m in self.cls_branches:
+            nn.init.constant_(m[-1].bias, bias_init)
 
     #@auto_fp16(apply_to=('img', 'radar'))
     def forward(self, mlvl_feats, radar_feats,

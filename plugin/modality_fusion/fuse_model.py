@@ -2,7 +2,7 @@ import torch
 
 #checkpoint1 = torch.load('/public/MARS/models/surrdet/points_model/centerpoint_01voxel_second_secfpn_circlenms_4x8_cyclic_20e_nus_20201001_135205-5db91e00.pth')
 
-checkpoint1 = torch.load('/home/chenxy/mmdetection3d/work_dirs/centerpoint_pointonly_0075voxel_q6_dataaug_fade_step_38e/epoch_2.pth')
+checkpoint1 = torch.load('/home/chenxy/mmdetection3d/work_dirs/centerpoint_pointonly_02pillar_q6_dataaug_fade_step2_38e/epoch_2.pth')
 state_dict1 = checkpoint1['state_dict']
 
 checkpoint2 = torch.load('/public/MARS/models/surrdet/image_models/detrcam_3ddet_fcos3d_pre_24ep.pth')
@@ -20,7 +20,7 @@ for name in list(merged_state_dict.keys()):
         merged_state_dict.pop(name)
 '''
 
-torch.save(save_checkpoint, '/public/MARS/models/surrdet/pts_img_models/img_3473_0075voxel_q6_epoch_38_6012.pth') 
+torch.save(save_checkpoint, '/public/MARS/models/surrdet/pts_img_models/img_3473_02pillar_q6_epoch_38_5127.pth')
 
 '''
 checkpoint = torch.load('/home/chenxy/mmdetection3d/work_dirs/res101_prefcos3d_centerpoint_pre_02pillar_step_20e/epoch_20.pth')

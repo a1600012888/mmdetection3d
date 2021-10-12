@@ -14,3 +14,4 @@ from .detr_img_head import DeformableDETR3DCamHeadV2
 from .attention_img import Detr3DCamCrossAttenImg
 from .._base_.datasets.nuscenes_val import NuScenesDatasetVal
 from .data_aug import PhotoMetricDistortion3D
+from .reduceLidarBeams import  ReduceLiDARBeams, LoadReducedPointsFromMultiSweeps, ReducedDataBaseSampler

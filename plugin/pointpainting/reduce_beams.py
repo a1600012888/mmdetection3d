@@ -5,14 +5,16 @@ import time
 import numpy as np
 from torchvision import utils as vutils
 
-data_root = 'data/nuscenes/paintedpoints/samples/LIDAR_TOP/'
-filename = 'n015-2018-11-21-19-58-31+0800__LIDAR_TOP__1542801668197868.pcd.bin.npy'
+data_root = 'data/nuscenes/samples/LIDAR_TOP/'
+filename = 'n015-2018-11-21-19-58-31+0800__LIDAR_TOP__1542801668197868.pcd.bin'
 
-pts = np.load(data_root + filename)
-pts = pts.reshape(-1, 15)
+pts = np.fromfile(data_root + filename, dtype=np.float32)
+pts = pts.reshape(-1, 5)
 pts = torch.from_numpy(pts)
 print(pts.size())
-# 
+# x = r * cos(phi) * cos(theta)
+# y = r * cos(phi) * sin(theta)
+# z = r * sin(theta)
 pts_3d = pts[:, :3]
 radius = torch.sqrt(pts[:, 0].pow(2) + pts[:, 1].pow(2) + pts[:, 2].pow(2))
 sine_phi = pts[:, 2] / radius

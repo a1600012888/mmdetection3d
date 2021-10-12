@@ -361,7 +361,7 @@ class Detr3DCamPoint(MVXTwoStageDetector):
     def extract_feat(self, points, img, img_metas):
         """Extract features from images and points."""
         #img_feats = self.extract_img_feat(img, img_metas)
-        
+        print(points.size())
         pts_feats = self.extract_pts_feat(points)
         #print('pts_feats', len(pts_feats))
         #for i in range(4):

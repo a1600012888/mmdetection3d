@@ -66,7 +66,8 @@ class Detr3DCamPlusSparseAttenTrack(BaseModule):
                  dropout=0.1,
                  weight_dropout=0.0,
                  norm_cfg=None,
-                 init_cfg=None):
+                 init_cfg=None,
+                 **kwargs,):
         super(Detr3DCamPlusSparseAttenTrack, self).__init__(init_cfg)
         if embed_dims % num_heads != 0:
             raise ValueError(f'embed_dims must be divisible by num_heads, '

@@ -398,7 +398,7 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
         # the track id will be assigned by the mather.
         track_instances_list = [self._copy_tracks_for_loss(track_instances) for i in range(nb_dec-1)]
         track_instances.output_embedding = query_feats[0]  # [300, feat_dim]
-        velo = output_coords[-1, 0, :, -3:] # [num_query, 3]
+        velo = output_coords[-1, 0, :, -2:] # [num_query, 3]
 
         if l2g_r2 is not None:
             ref_pts = self.velo_update(
@@ -547,7 +547,7 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
 
         if l2g_r2 is not None and len(active_inst) > 0 and l2g_r1 is not None:
             ref_pts = active_inst.ref_pts
-            velo = active_inst.pred_boxes[:, -3:]
+            velo = active_inst.pred_boxes[:, -2:]
             ref_pts = self.velo_update(
                 ref_pts, velo, l2g_r1, l2g_t1, l2g_r2, l2g_t2,
                 time_delta=time_delta)

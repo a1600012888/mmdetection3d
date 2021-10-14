@@ -15,3 +15,6 @@ from .transformer import (Detr3DCamTransformerPlus,
 from .attention import Detr3DCamCrossAttenTrack, Detr3DCamRadarSparseAttenTrack
 from .attention_plus import Detr3DCamPlusSparseAttenTrack
 from .radar_encoder import RADAR_ENCODERS, build_radar_encoder
+
+from .head_plus_raw import DeformableDETR3DCamHeadTrackPlusRaw
+from .tracker_plus_lidar_velo import Detr3DCamTrackerPlusLidarVelo

@@ -3,8 +3,8 @@ _base_ = [
     '../../_base_/default_runtime.py'
 ]
 workflow = [('train', 1)]
-plugin=True
-plugin_dir='plugin/track/'
+plugin = True
+plugin_dir = 'plugin/track/'
 
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_size = [0.2, 0.2, 8]
@@ -25,7 +25,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamRadarTracker',
+    type='Detr3DCamTrackerPlusLidarVelo',
     use_grid_mask=True,  # use grid mask
     num_classes=7,
     num_query=300,
@@ -56,7 +56,7 @@ model = dict(
         type='ResNet',
         with_cp=False,
         #with_cp=True,
-        #pretrained='open-mmlab://detectron2/resnet50_caffe',
+        pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -70,16 +70,15 @@ model = dict(
         type='ClipMatcher',
         num_classes=7,
         weight_dict=None,
-        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2],
         assigner=dict(
             type='HungarianAssigner3DTrack',
-            cls_cost=dict(type='FocalLossCost', weight=3.0),
+            cls_cost=dict(type='FocalLossCost', weight=2.0),
             reg_cost=dict(type='BBox3DL1Cost', weight=0.25),
             pc_range=point_cloud_range),
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,
-            gamma=3.0,
+            gamma=2.0,
             alpha=0.25,
             loss_weight=2.0),
         loss_bbox=dict(type='L1Loss', loss_weight=0.25),
@@ -95,16 +94,16 @@ model = dict(
         norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamRadarHeadTrack',
+        type='DeformableDETR3DCamHeadTrackPlusRaw',
         num_classes=7,
         in_channels=256,
         num_cams=6,
         num_feature_levels=4,
         with_box_refine=True,
         transformer=dict(
-            type='Detr3DCamTransformerPlus',
+            type='Detr3DCamTrackTransformer',
             decoder=dict(
-                type='Detr3DCamTransformerDecoder',
+                type='Detr3DCamTrackPlusTransformerDecoder',
                 num_layers=6,
                 return_intermediate=True,
                 transformerlayers=dict(
@@ -116,9 +115,10 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamRadarSparseAttenTrack',
+                            type='Detr3DCamPlusSparseAttenTrack',
                             pc_range=point_cloud_range,
-                            num_points=1,
+                            num_points=4,
+                            num_heads=8,
                             embed_dims=256,
                             radar_topk=30,
                             radar_dims=64)
@@ -164,7 +164,7 @@ model = dict(
         post_max_size=83,
         nms_thr=0.2))
 
-# x y z rcs vx_comp vy_comp x_rms y_rms vx_rms vy_rms
+# x y z rcs vx vy vx_comp vy_comp x_rms y_rms vx_rms vy_rms
 radar_use_dims = [0, 1, 2, 5, 6, 7, 8, 9, 12, 13, 16, 17, 18]
 dataset_type = 'NuScenesTrackDatasetRadar'
 data_root = 'data/nuscenes/'
@@ -182,9 +182,9 @@ train_pipeline = [
     dict(
         type='LoadRadarPointsMultiSweeps',
         load_dim=18,
-        sweeps_num=2,
+        sweeps_num=4,
         use_dim=radar_use_dims,
-        max_num=600, ),
+        max_num=1200, ),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
     dict(type='InstanceRangeFilter', point_cloud_range=point_cloud_range),
     #dict(type='ObjectNameFilter', classes=class_names),
@@ -206,9 +206,9 @@ test_pipeline = [
     dict(
         type='LoadRadarPointsMultiSweeps',
         load_dim=18,
-        sweeps_num=2,
+        sweeps_num=4,
         use_dim=radar_use_dims,
-        max_num=600, ),
+        max_num=1200, ),
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
 ]
@@ -275,6 +275,5 @@ runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'
-load_from = 'work_dirs/models/backbone_neck.pth'
 
 #fp16 = dict(loss_scale='dynamic')

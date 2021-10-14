@@ -68,7 +68,7 @@ class RuntimeTrackerBase(object):
 
 
 @DETECTORS.register_module()
-class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
+class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
     """Tracker which support image w, w/o radar."""
 
     def __init__(self,
@@ -111,7 +111,7 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
                  test_cfg=None,
                  pretrained=None,
                  ):
-        super(Detr3DCamTrackerPlusMeminHead,
+        super(Detr3DCamTrackerPlusLidarVelo,
               self).__init__(pts_voxel_layer, pts_voxel_encoder,
                              pts_middle_encoder, pts_fusion_layer,
                              img_backbone, pts_backbone, img_neck, pts_neck,
@@ -167,7 +167,7 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
         Args:
             ref_pts (Tensor): (num_query, 3).  in inevrse sigmoid space
             velocity (Tensor): (num_query, 2). m/s
-                in global frame. vx, vy
+                in lidar frame. vx, vy
             global2lidar (np.Array) [4,4].
         Outs:
             ref_pts (Tensor): (num_query, 3).  in inevrse sigmoid space
@@ -175,50 +175,23 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
         # print(l2g_r1.type(), l2g_t1.type(), ref_pts.type())
         time_delta = time_delta.type(torch.float)
         num_query = ref_pts.size(0)
-        reference_points = ref_pts.sigmoid().clone()
-        pc_range = self.pc_range
-        reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
-        reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
-        reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
-
-        ref_pts = reference_points + velocity * time_delta
-
-        ref_pts[..., 0:1] = (ref_pts[..., 0:1] - pc_range[0]) / (pc_range[3] - pc_range[0])
-        ref_pts[..., 1:2] = (ref_pts[..., 1:2] - pc_range[1]) / (pc_range[4] - pc_range[1])
-        ref_pts[..., 2:3] = (ref_pts[..., 2:3] - pc_range[2]) / (pc_range[5] - pc_range[2])
-
-        ref_pts = inverse_sigmoid(ref_pts)
-
-        return ref_pts
-
-    def velo_update_global(self, ref_pts, velocity, l2g_r1, l2g_t1, l2g_r2, l2g_t2,
-                           time_delta):
-        '''
-        Args:
-            ref_pts (Tensor): (num_query, 3).  in inevrse sigmoid space
-            velocity (Tensor): (num_query, 2). m/s
-                in global frame. vx, vy
-            global2lidar (np.Array) [4,4].
-        Outs:
-            ref_pts (Tensor): (num_query, 3).  in inevrse sigmoid space
-        '''
-        # print(l2g_r1.type(), l2g_t1.type(), ref_pts.type())
-        time_delta = time_delta.type(torch.float)
-        num_query = ref_pts.size(0)
-        reference_points = ref_pts.sigmoid().clone()
-        pc_range = self.pc_range
-        reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
-        reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
-        reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
-
-        reference_points = reference_points @ l2g_r1 + l2g_t1
         velo_pad_ = velocity.new_zeros((num_query, 1))
         velo_pad = torch.cat((velocity, velo_pad_), dim=-1)
 
+        reference_points = ref_pts.sigmoid().clone()
+        pc_range = self.pc_range
+        reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
+        reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
+        reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
+
         reference_points = reference_points + velo_pad * time_delta
 
+        ref_pts = reference_points @ l2g_r1 + l2g_t1 - l2g_t2
+
         g2l_r = torch.linalg.inv(l2g_r2).type(torch.float)
-        ref_pts = (reference_points - l2g_t2) @ g2l_r
+
+        ref_pts = ref_pts @ g2l_r
+
         ref_pts[..., 0:1] = (ref_pts[..., 0:1] - pc_range[0]) / (pc_range[3] - pc_range[0])
         ref_pts[..., 1:2] = (ref_pts[..., 1:2] - pc_range[1]) / (pc_range[4] - pc_range[1])
         ref_pts[..., 2:3] = (ref_pts[..., 2:3] - pc_range[2]) / (pc_range[5] - pc_range[2])
@@ -226,6 +199,7 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
         ref_pts = inverse_sigmoid(ref_pts)
 
         return ref_pts
+
 
     def extract_pts_feat(self, pts, img_feats, img_metas):
         """Extract features of points."""
@@ -303,7 +277,7 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
         # init boxes: xy, wl, z, h, sin, cos, vx, vy, vz
         box_sizes = self.bbox_size_fc(query[..., :dim // 2])
         pred_boxes_init = torch.zeros(
-            (len(track_instances), 11), dtype=torch.float, device=device)
+            (len(track_instances), 10), dtype=torch.float, device=device)
         
         pred_boxes_init[..., 2:4] = box_sizes[..., 0:2]
         pred_boxes_init[..., 5:6] = box_sizes[..., 2:3]
@@ -357,7 +331,7 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
         track_instances.track_scores = torch.zeros(
             (len(track_instances),), dtype=torch.float, device=device)
         track_instances.pred_boxes = torch.zeros(
-            (len(track_instances), 11), dtype=torch.float, device=device)
+            (len(track_instances), 10), dtype=torch.float, device=device)
         track_instances.pred_logits = torch.zeros(
             (len(track_instances), self.num_classes),
             dtype=torch.float, device=device)
@@ -406,11 +380,9 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
              track_instances.pred_boxes[:, 5:6]], dim=1)
         
         output_classes, output_coords, \
-            query_feats, last_ref_pts, \
-            track_instances, self.memory_bank = self.pts_bbox_head(
+            query_feats, last_ref_pts = self.pts_bbox_head(
                 img_feats, radar_feats, track_instances.query,
-                track_instances.ref_pts, ref_box_sizes, img_metas,
-                track_instances, self.memory_bank)
+                track_instances.ref_pts, ref_box_sizes, img_metas,)
 
         out = {'pred_logits': output_classes[-1],
                'pred_boxes': output_coords[-1],
@@ -425,6 +397,7 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
 
         # the track id will be assigned by the mather.
         track_instances_list = [self._copy_tracks_for_loss(track_instances) for i in range(nb_dec-1)]
+        track_instances.output_embedding = query_feats[0]  # [300, feat_dim]
         velo = output_coords[-1, 0, :, -3:] # [num_query, 3]
 
         if l2g_r2 is not None:
@@ -453,6 +426,11 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
                 out, i, if_step=(i == (nb_dec - 1)))
 
         # TODO calc_loss_for_track_scores
+        if self.memory_bank is not None:
+            track_instances = self.memory_bank(track_instances)
+            # track_instances.track_scores = track_instances.track_scores[..., 0]
+            # track_instances.scores = track_instances.track_scores.sigmoid()
+            # self.criterion.calc_loss_for_track_scores(track_instances)
 
         # Step-2 Update track instances using matcher
 
@@ -518,33 +496,6 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
             boxes = gt_bboxes_3d[0][i].tensor.to(img.device)
             # normalize gt bboxes here!
             boxes = normalize_bbox(boxes, self.pc_range)
-
-            ## change the velocity from global frame, to recitifed velo
-            velo_xy = boxes[..., 8:10]
-            x = torch.cat((
-                boxes[..., 0:1], 
-                boxes[..., 1:2], 
-                boxes[..., 4:5], 
-            ), dim=-1)
-            num_box, _ = velo_xy.shape
-            pad_ = velo_xy.new_zeros((num_box, 1))
-            velo_pad = torch.cat((velo_xy, pad_), dim=-1)
-
-            l2g_r2 = l2g_r_mat[i+1]
-            l2g_t2 = l2g_t[i+1]
-            l2g_r1 = l2g_r_mat[i]
-            l2g_t1 = l2g_t[i]
-            g2l_r2 = torch.linalg.inv(l2g_r2 + 1e-5).type(torch.float)
-
-            velo = velo_pad @ l2g_r1 - (l2g_t2 - l2g_t1) - \
-                x @ (l2g_r2 - l2g_r1 + 1e-5)
-
-            velo = velo @ g2l_r2
-            # velo = velo[..., 0:2]
-
-            boxes = torch.cat(
-                [boxes[..., :8], velo], dim=-1
-            )
 
             gt_instances.boxes = boxes
             gt_instances.labels = gt_labels_3d[0][i]
@@ -615,11 +566,9 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
              track_instances.pred_boxes[:, 5:6]], dim=1)
 
         output_classes, output_coords, \
-            query_feats, last_ref_pts, \
-            track_instances, self.memory_bank = self.pts_bbox_head(
+            query_feats, last_ref_pts = self.pts_bbox_head(
                 img_feats, radar_feats, track_instances.query,
-                track_instances.ref_pts, ref_box_sizes, img_metas,
-                track_instances, self.memory_bank)
+                track_instances.ref_pts, ref_box_sizes, img_metas,)
 
         out = {'pred_logits': output_classes[-1],
                'pred_boxes': output_coords[-1],
@@ -643,6 +592,12 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
 
         self.track_base.update(track_instances)
         #self.track_base.update_fix_label(track_instances, old_class_scores)
+
+        if self.memory_bank is not None:
+            track_instances = self.memory_bank(track_instances)
+            # track_instances.track_scores = track_instances.track_scores[..., 0]
+            # track_instances.scores = track_instances.track_scores.sigmoid()
+
         # Step-2 Update track instances using matcher
 
         tmp = {}

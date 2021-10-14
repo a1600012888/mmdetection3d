@@ -50,7 +50,7 @@ model = dict(
     radar_encoder=dict(
         type='RadarPointEncoderXY',
         in_channels=13,
-        out_channels=[32, 64],
+        out_channels=[32, 32, 64],
         norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01),),
     img_backbone=dict(
         type='ResNet',
@@ -119,7 +119,7 @@ model = dict(
                             pc_range=point_cloud_range,
                             num_points=1,
                             embed_dims=256,
-                            radar_topk=10,
+                            radar_topk=30,
                             radar_dims=64)
                     ],
                     feedforward_channels=512,
@@ -181,9 +181,9 @@ train_pipeline = [
     dict(
         type='LoadRadarPointsMultiSweeps',
         load_dim=18,
-        sweeps_num=2,
+        sweeps_num=4,
         use_dim=radar_use_dims,
-        max_num=600, ),
+        max_num=1200, ),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
     dict(type='InstanceRangeFilter', point_cloud_range=point_cloud_range),
     #dict(type='ObjectNameFilter', classes=class_names),
@@ -205,9 +205,9 @@ test_pipeline = [
     dict(
         type='LoadRadarPointsMultiSweeps',
         load_dim=18,
-        sweeps_num=2,
+        sweeps_num=4,
         use_dim=radar_use_dims,
-        max_num=600, ),
+        max_num=1200, ),
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
 ]

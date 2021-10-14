@@ -28,9 +28,9 @@ model = dict(
     use_grid_mask=True, # use grid mask
     img_backbone=dict(
         type='ResNet',
-        with_cp=True,
-        pretrained='open-mmlab://detectron2/resnet50_caffe',
-        depth=50,
+        with_cp=False,
+        #pretrained='open-mmlab://detectron2/resnet101_caffe',
+        depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
@@ -56,7 +56,7 @@ model = dict(
         norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01),),
     pts_bbox_head=dict(
         type='DeformableDETR3DCamRadarHead',
-        num_query=300,
+        num_query=600,
         num_classes=10,
         in_channels=256,
         sync_cls_avg_factor=True,
@@ -316,7 +316,7 @@ data = dict(
 
 optimizer = dict(
     type='AdamW',
-    lr=2e-4 * 6 / 8.0,
+    lr=2e-4,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
@@ -338,4 +338,4 @@ evaluation = dict(interval=2, pipeline=eval_pipeline)
 runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = False
-load_from='work_dirs/radar_det/res50_sparse_static_mul4_1200_30_24ep/latest.pth'
+load_from='/public/MARS/models/surrdet/image_models/fcos3d.pth'

@@ -120,7 +120,7 @@ model = dict(
         gaussian_overlap=0.1,
         max_objs=500,
         min_radius=2,
-        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2],
+        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         assigner=dict(
             type='HungarianAssigner3D',
             cls_cost=dict(type='FocalLossCost', weight=2.0),
@@ -316,7 +316,7 @@ data = dict(
 
 optimizer = dict(
     type='AdamW',
-    lr=2e-4 * 6 / 8.0,
+    lr=2e-4 ,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
@@ -338,4 +338,4 @@ evaluation = dict(interval=2, pipeline=eval_pipeline)
 runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = False
-load_from='work_dirs/radar_det/res50_sparse_static_mul4_1200_30_24ep/latest.pth'
+#load_from='work_dirs/radar_det/res50_baseline/epoch_12.pth'

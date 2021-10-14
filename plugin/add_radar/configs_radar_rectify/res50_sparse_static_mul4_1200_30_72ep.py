@@ -316,7 +316,7 @@ data = dict(
 
 optimizer = dict(
     type='AdamW',
-    lr=2e-4 * 6 / 8.0,
+    lr=2e-4 / 8.0,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
@@ -331,11 +331,11 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[20, 23])
-total_epochs = 24
+    step=[68, 71])
+total_epochs = 72
 evaluation = dict(interval=2, pipeline=eval_pipeline)
 
-runner = dict(type='EpochBasedRunner', max_epochs=24)
+runner = dict(type='EpochBasedRunner', max_epochs=72)
 
 find_unused_parameters = False
 load_from='work_dirs/radar_det/res50_sparse_static_mul4_1200_30_24ep/latest.pth'

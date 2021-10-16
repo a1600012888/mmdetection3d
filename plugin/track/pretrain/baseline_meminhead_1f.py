@@ -226,7 +226,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=3,
+            num_frames_per_sample=1,
             data_root=data_root,
             ann_file=data_root + 'track_radar_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -276,4 +276,4 @@ find_unused_parameters = True
 # load_from = 'work_dirs/track/membank_in_head/res50_baseline/latest.pth'
 #load_from = 'work_dirs/track/lidar_velo/rdar_cam_xywlzh_12ep_fix_radar_attn_notanh_detach/latest.pth'
 
-fp16 = dict(loss_scale='dynamic')
+#fp16 = dict(loss_scale='dynamic')

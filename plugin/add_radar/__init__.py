@@ -8,7 +8,7 @@ from .transformer import Detr3DCamRadarTransformerDecoder, Detr3DCamRadarTransfo
 from .sparse_attention import Detr3DCamRadarSparseCrossAtten, Detr3DCamRadarSparseDynamicCrossAtten
 from .hungarian_assigner_3d_velo import HungarianAssigner3DVelo
 from .one_match_attention import Detr3DCamRadarOneMatchCrossAtten
-from .attention_dert3d import Detr3DCrossAtten, Detr3DCamRadarCrossAtten
+from .attention_detr3d import Detr3DCrossAtten, Detr3DCamRadarCrossAtten
 
 __all__ = [
     'RADAR_ENCODERS', 'build_radar_encoder', 'LoadRadarPoints',

@@ -25,7 +25,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamTrackerPlusMeminHead',
+    type='Detr3DCamTrackerPlusLidarVelo',
     use_grid_mask=True,  # use grid mask
     num_classes=7,
     num_query=300,
@@ -70,6 +70,7 @@ model = dict(
         type='ClipMatcher',
         num_classes=7,
         weight_dict=None,
+        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2],
         assigner=dict(
             type='HungarianAssigner3DTrack',
             cls_cost=dict(type='FocalLossCost', weight=2.0),
@@ -94,7 +95,7 @@ model = dict(
         norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamHeadTrackPlusMem',
+        type='DeformableDETR3DCamHeadTrackPlusRaw',
         num_classes=7,
         in_channels=256,
         num_cams=6,
@@ -142,7 +143,7 @@ model = dict(
         gaussian_overlap=0.1,
         max_objs=500,
         min_radius=2,
-        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2],
+        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2],
         assigner=dict(
             type='HungarianAssigner3D',
             cls_cost=dict(type='FocalLossCost', weight=2.0),
@@ -226,7 +227,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=3,
+            num_frames_per_sample=1,
             data_root=data_root,
             ann_file=data_root + 'track_radar_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -273,7 +274,6 @@ evaluation = dict(interval=2)
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
-# load_from = 'work_dirs/track/membank_in_head/res50_baseline/latest.pth'
-#load_from = 'work_dirs/track/lidar_velo/rdar_cam_xywlzh_12ep_fix_radar_attn_notanh_detach/latest.pth'
+#load_from = 'work_dirs/track/2t/latest.pth'
 
-fp16 = dict(loss_scale='dynamic')
+#fp16 = dict(loss_scale='dynamic')

@@ -2,7 +2,6 @@
 import math
 
 import numpy as np
-from plugin.track.models import radar_encoder
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -413,7 +412,7 @@ class Detr3DCamRadarCrossAtten(BaseModule):
             bs, num_query, self.radar_topk)
 
         # [B, num_query, topk]
-        attention_weights_radar = self.weight_dropout(attention_weights_radar.sigmoid()) * top_mask
+        attention_weights_radar = attention_weights_radar.sigmoid() * top_mask
         # [B, num_query, topk, radar_dim]
         radar_out = radar_feats_topk * attention_weights_radar.unsqueeze(dim=-1)
         # [bs, num_query, radar_dim]
@@ -422,7 +421,7 @@ class Detr3DCamRadarCrossAtten(BaseModule):
         # change to (num_query, bs, embed_dims)
         radar_out = radar_out.permute(1, 0, 2)
         
-        radar_out = self.radar_out_proj(radar_out)
+        radar_out = self.radar_output_proj(radar_out)
 
         output = torch.cat((output, radar_out), dim=-1)
         output = self.img_radar_fusion(output)
@@ -456,8 +455,8 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     mask = (reference_points_cam[..., 2:3] > eps)
     reference_points_cam = reference_points_cam[..., 0:2] / torch.maximum(
         reference_points_cam[..., 2:3], torch.ones_like(reference_points_cam[..., 2:3])*eps)
-    reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][1]
-    reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0]
+    reference_points_cam[..., 0] /= img_metas[0]['img_shape'][0][0][1]
+    reference_points_cam[..., 1] /= img_metas[0]['img_shape'][0][0][0]
     reference_points_cam = (reference_points_cam - 0.5) * 2
     mask = (mask & (reference_points_cam[..., 0:1] > -1.0) 
                  & (reference_points_cam[..., 0:1] < 1.0) 

@@ -79,8 +79,6 @@ model = dict(
                         dict(
                             type='Detr3DCamRadarCrossAtten',
                             pc_range=point_cloud_range,
-                            use_dconv=False,
-                            use_level_cam_embed=False,
                             num_points=1,
                             embed_dims=256,
                             radar_topk=30,
@@ -338,4 +336,4 @@ evaluation = dict(interval=2, pipeline=eval_pipeline)
 runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = False
-load_from='/public/MARS/models/surrdet/image_models/fcos3d.pth'
+# load_from='/public/MARS/models/surrdet/image_models/fcos3d.pth'

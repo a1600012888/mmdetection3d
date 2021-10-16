@@ -25,7 +25,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamTrackerPlusLidarVelo',
+    type='Detr3DCamTrackerPlusMeminHead',
     use_grid_mask=True,  # use grid mask
     num_classes=7,
     num_query=300,
@@ -70,7 +70,6 @@ model = dict(
         type='ClipMatcher',
         num_classes=7,
         weight_dict=None,
-        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2],
         assigner=dict(
             type='HungarianAssigner3DTrack',
             cls_cost=dict(type='FocalLossCost', weight=2.0),
@@ -95,7 +94,7 @@ model = dict(
         norm_cfg=dict(type='BN2d'),
         relu_before_extra_convs=True),
     pts_bbox_head=dict(
-        type='DeformableDETR3DCamHeadTrackPlusRaw',
+        type='DeformableDETR3DCamHeadTrackPlusMem',
         num_classes=7,
         in_channels=256,
         num_cams=6,
@@ -116,10 +115,9 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamPlusSparseAttenTrack',
+                            type='Detr3DCamRadarCrossAtten',
                             pc_range=point_cloud_range,
-                            num_points=4,
-                            num_heads=8,
+                            num_points=1,
                             embed_dims=256,
                             radar_topk=30,
                             radar_dims=64)
@@ -183,9 +181,9 @@ train_pipeline = [
     dict(
         type='LoadRadarPointsMultiSweeps',
         load_dim=18,
-        sweeps_num=4,
+        sweeps_num=2,
         use_dim=radar_use_dims,
-        max_num=1200, ),
+        max_num=600, ),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
     dict(type='InstanceRangeFilter', point_cloud_range=point_cloud_range),
     #dict(type='ObjectNameFilter', classes=class_names),
@@ -207,9 +205,9 @@ test_pipeline = [
     dict(
         type='LoadRadarPointsMultiSweeps',
         load_dim=18,
-        sweeps_num=4,
+        sweeps_num=2,
         use_dim=radar_use_dims,
-        max_num=1200, ),
+        max_num=600, ),
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
 ]
@@ -274,7 +272,8 @@ evaluation = dict(interval=2)
 
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 
-find_unused_parameters = True
-#load_from = 'work_dirs/track/2t/latest.pth'
+find_unused_parameters = False
+# load_from = 'work_dirs/track/membank_in_head/res50_baseline/latest.pth'
+#load_from = 'work_dirs/track/lidar_velo/rdar_cam_xywlzh_12ep_fix_radar_attn_notanh_detach/latest.pth'
 
 #fp16 = dict(loss_scale='dynamic')

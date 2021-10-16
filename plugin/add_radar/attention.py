@@ -186,7 +186,7 @@ class MultiheadAttentionAdvanced(BaseModule):
 
 
 @ATTENTION.register_module()
-class Detr3DCamRadarCrossAtten(BaseModule):
+class Detr3DCamRadarCrossAttenV2(BaseModule):
     """An attention module used in Deformable-Detr. `Deformable DETR:
     Deformable Transformers for End-to-End Object Detection.
       <https://arxiv.org/pdf/2010.04159.pdf>`_.

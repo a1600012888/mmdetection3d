@@ -116,10 +116,9 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamPlusSparseAttenTrack',
+                            type='Detr3DCamRadarCrossAtten',
                             pc_range=point_cloud_range,
-                            num_points=4,
-                            num_heads=8,
+                            num_points=1,
                             embed_dims=256,
                             radar_topk=30,
                             radar_dims=64)
@@ -144,7 +143,7 @@ model = dict(
         gaussian_overlap=0.1,
         max_objs=500,
         min_radius=2,
-        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2],
+        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2],
         assigner=dict(
             type='HungarianAssigner3D',
             cls_cost=dict(type='FocalLossCost', weight=2.0),
@@ -277,4 +276,4 @@ runner = dict(type='EpochBasedRunner', max_epochs=12)
 find_unused_parameters = True
 #load_from = 'work_dirs/track/2t/latest.pth'
 
-#fp16 = dict(loss_scale='dynamic')
+fp16 = dict(loss_scale='dynamic')

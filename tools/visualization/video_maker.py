@@ -53,6 +53,35 @@ def make_sensor_videos(sample_tokens: list,
     
     imageio.mimsave(gif_path, img_cat_list, fps=fps)
     
+
+def make_sensor_pred_videos(sample_tokens: list, 
+                            results_keys: list,
+                            results_dict,
+                            nusc_explorer,
+                            out_dir='../../work_dirs/visualization/test',
+                            fps=2):
+    
+    out_img_dir = os.path.join(out_dir, 'images')
+    
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
+    if not os.path.exists(out_img_dir):
+        os.mkdir(out_img_dir)
+    gif_path = os.path.join(out_dir, 'final.gif')
+    
+    out_img_paths = []
+    for i, (sample_token, key) in enumerate(zip(sample_tokens, results_dict)):
+        out_path = os.path.join(out_img_dir, '{}.png'.format(i))
+        out_img_paths.append(out_path)
+        results = results_dict[key]
+        nusc_explorer.render_sample_pred(
+            sample_token, results, out_path=out_path)
+    
+    img_cat_list = []
+    for img_path in out_img_paths:
+        img_cat_list.append(imageio.imread(img_path))
+    
+    imageio.mimsave(gif_path, img_cat_list, fps=fps)
     
 def _test():
     from tools.visualization.nusc_explorer import NuScenesMars, NuScenesExplorerMars

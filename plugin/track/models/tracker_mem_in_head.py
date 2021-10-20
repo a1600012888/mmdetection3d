@@ -191,41 +191,6 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
 
         return ref_pts
 
-    def velo_update_global(self, ref_pts, velocity, l2g_r1, l2g_t1, l2g_r2, l2g_t2,
-                           time_delta):
-        '''
-        Args:
-            ref_pts (Tensor): (num_query, 3).  in inevrse sigmoid space
-            velocity (Tensor): (num_query, 2). m/s
-                in global frame. vx, vy
-            global2lidar (np.Array) [4,4].
-        Outs:
-            ref_pts (Tensor): (num_query, 3).  in inevrse sigmoid space
-        '''
-        # print(l2g_r1.type(), l2g_t1.type(), ref_pts.type())
-        time_delta = time_delta.type(torch.float)
-        num_query = ref_pts.size(0)
-        reference_points = ref_pts.sigmoid().clone()
-        pc_range = self.pc_range
-        reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
-        reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
-        reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
-
-        reference_points = reference_points @ l2g_r1 + l2g_t1
-        velo_pad_ = velocity.new_zeros((num_query, 1))
-        velo_pad = torch.cat((velocity, velo_pad_), dim=-1)
-
-        reference_points = reference_points + velo_pad * time_delta
-
-        g2l_r = torch.linalg.inv(l2g_r2).type(torch.float)
-        ref_pts = (reference_points - l2g_t2) @ g2l_r
-        ref_pts[..., 0:1] = (ref_pts[..., 0:1] - pc_range[0]) / (pc_range[3] - pc_range[0])
-        ref_pts[..., 1:2] = (ref_pts[..., 1:2] - pc_range[1]) / (pc_range[4] - pc_range[1])
-        ref_pts[..., 2:3] = (ref_pts[..., 2:3] - pc_range[2]) / (pc_range[5] - pc_range[2])
-
-        ref_pts = inverse_sigmoid(ref_pts)
-
-        return ref_pts
 
     def extract_pts_feat(self, pts, img_feats, img_metas):
         """Extract features of points."""
@@ -529,6 +494,8 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
             num_box, _ = velo_xy.shape
             pad_ = velo_xy.new_zeros((num_box, 1))
             velo_pad = torch.cat((velo_xy, pad_), dim=-1)
+            
+            time_delta = timestamp[i+1] - timestamp[i]
 
             l2g_r2 = l2g_r_mat[i+1]
             l2g_t2 = l2g_t[i+1]
@@ -536,10 +503,10 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
             l2g_t1 = l2g_t[i]
             g2l_r2 = torch.linalg.inv(l2g_r2 + 1e-5).type(torch.float)
 
-            velo = velo_pad @ l2g_r1 - (l2g_t2 - l2g_t1) - \
+            velo = time_delta * velo_pad @ l2g_r1 - (l2g_t2 - l2g_t1) - \
                 x @ (l2g_r2 - l2g_r1 + 1e-5)
 
-            velo = velo @ g2l_r2
+            velo = velo @ g2l_r2 / time_delta
             # velo = velo[..., 0:2]
 
             boxes = torch.cat(
@@ -737,10 +704,14 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
             dict(track_instances=track_instances))
         self.test_track_instances = track_instances
 
-        results = self._active_instances2results(active_instances, img_metas)
+        results = self._active_instances2results(
+            deepcopy(active_instances), img_metas,
+            l2g_r1, l2g_t1, l2g_r2, l2g_t2, time_delta)
         return results
 
-    def _active_instances2results(self, active_instances, img_metas):
+    def _active_instances2results(self, active_instances, img_metas,
+                                  l2g_r1=None, l2g_t1=None, l2g_r2=None, l2g_t2=None,
+                                  time_delta=None):
         '''
         Outs:
         active_instances. keys:
@@ -762,6 +733,19 @@ class Detr3DCamTrackerPlusMeminHead(MVXTwoStageDetector):
         active_instances = active_instances[active_idxes]
         if active_instances.pred_logits.numel() == 0:
             return [None]
+
+        velocity = active_instances.pred_boxes[:, -3:]
+        x = active_instances.ref_pts
+        if l2g_r1 is not None and l2g_r2 is not None:
+            # print('correct velo')
+            ret = (x + velocity * time_delta) @ l2g_r2 + l2g_t2 - l2g_t1
+            g2l_r = torch.linalg.inv(l2g_r1).type(torch.float)
+            ret = ret @ g2l_r - x
+            ret = ret / (time_delta + 1e-9)
+            active_instances.pred_boxes = torch.cat(
+                [active_instances.pred_boxes[:, :-3], ret], dim=-1
+            )
+
         bbox_dict = dict(
             cls_scores=active_instances.pred_logits,
             bbox_preds=active_instances.pred_boxes,

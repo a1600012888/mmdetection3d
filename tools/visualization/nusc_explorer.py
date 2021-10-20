@@ -535,7 +535,7 @@ class NuScenesExplorerMars(NuScenesExplorer):
             raise ValueError("Error: Unknown sensor modality!")
 
         ax.axis('off')
-        ax.set_title('{} {labels_type}'.format(
+        ax.set_title('{} {labels_type} - Pred'.format(
             sd_record['channel'], labels_type='(predictions)' if lidarseg_preds_bin_path else ''))
         ax.set_aspect('equal')
 
@@ -544,6 +544,53 @@ class NuScenesExplorerMars(NuScenesExplorer):
 
         if verbose:
             plt.show()
+
+
+def load_results_json(results_path: str = None):
+    NameMapping = {
+        'movable_object.barrier': 'barrier',
+        'vehicle.bicycle': 'bicycle',
+        'vehicle.bus.bendy': 'bus',
+        'vehicle.bus.rigid': 'bus',
+        'vehicle.car': 'car',
+        'vehicle.construction': 'construction_vehicle',
+        'vehicle.motorcycle': 'motorcycle',
+        'human.pedestrian.adult': 'pedestrian',
+        'human.pedestrian.child': 'pedestrian',
+        'human.pedestrian.construction_worker': 'pedestrian',
+        'human.pedestrian.police_officer': 'pedestrian',
+        'movable_object.trafficcone': 'traffic_cone',
+        'vehicle.trailer': 'trailer',
+        'vehicle.truck': 'truck'}
+    
+    inverse_mapping = {}
+    for key, value in NameMapping.items():
+        inverse_mapping[value] = key
+    with open(results_path) as f:
+        data = json.load(f)
+    results_dict = data['results']
+    
+    new_results_dict = {}
+    
+    for key, item in results_dict.items():
+        new_item = []
+        for _box_dict in item:
+            new_box = Box(
+                center=_box_dict['translation'],
+                size=_box_dict['size'],
+                orientation=Quaternion(_box_dict['rotation']),
+                label=int(_box_dict['tracking_id']),
+                score=_box_dict['tracking_score'],
+                velocity=_box_dict['velocity'] + [0],
+                name=inverse_mapping[_box_dict['tracking_name']],
+                token=_box_dict['sample_token'])
+            
+            new_item.append(new_box)
+        
+        new_results_dict[key] = new_item
+            
+
+    return new_results_dict
 
 
 def _test():
@@ -563,3 +610,33 @@ def _test():
     nusc_exp.render_sample_data(sample_data_token_cam)
     print('----------------------')
     nusc_exp.render_sample(samples[0]['token'])
+
+
+def _test_pred(results_path):
+    results_dict = load_results_json(results_path)
+
+    nusc = NuScenesMars(version='v1.0-trainval', dataroot='../../data/nuscenes')
+    nusc_exp = NuScenesExplorerMars(nusc)
+    samples = nusc.sample
+    samples[0]
+    lidar_names = ['LIDAR_TOP']
+    cam_names = ['CAM_FRONT',]
+    sample_data_token = samples[0]['data'][lidar_names[0]]
+    sample_data_token_cam = samples[0]['data'][cam_names[0]]
+    anns = nusc.sample_annotation
+    anns[0]
+    nusc_exp.render_sample_data(sample_data_token)
+    print('----------------------')
+    nusc_exp.render_sample_data(sample_data_token_cam)
+
+    selected_keys = list(results_dict.keys())[:10]
+    for sample_token in selected_keys:
+        
+        selected_sample = nusc.get('sample', sample_token)
+
+        selected_lidar_token = selected_sample['data']['LIDAR_TOP']
+        selected_cam_token = selected_sample['data']['CAM_FRONT']
+
+        nusc_exp.render_sample_pred(selected_lidar_token, results_dict[sample_token])
+
+    

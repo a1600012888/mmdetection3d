@@ -575,19 +575,33 @@ def load_results_json(results_path: str = None):
     for key, item in results_dict.items():
         new_item = []
         for _box_dict in item:
-            new_box = Box(
-                center=_box_dict['translation'],
-                size=_box_dict['size'],
-                orientation=Quaternion(_box_dict['rotation']),
-                label=int(_box_dict['tracking_id']),
-                score=_box_dict['tracking_score'],
-                velocity=_box_dict['velocity'] + [0],
-                name=inverse_mapping[_box_dict['tracking_name']],
-                token=_box_dict['sample_token'])
-            
+            if 'detection_name' in _box_dict:
+                score=_box_dict['detection_score']
+                if score < 0.25:
+                    continue
+                new_box = Box(
+                    center=_box_dict['translation'],
+                    size=_box_dict['size'],
+                    orientation=Quaternion(_box_dict['rotation']),
+                    score=_box_dict['detection_score'],
+                    velocity=_box_dict['velocity'] + [0],
+                    name=inverse_mapping[_box_dict['detection_name']],
+                    token=_box_dict['sample_token'])
+            else:
+                new_box = Box(
+                    center=_box_dict['translation'],
+                    size=_box_dict['size'],
+                    orientation=Quaternion(_box_dict['rotation']),
+                    label=int(_box_dict['tracking_id']),
+                    score=_box_dict['tracking_score'],
+                    velocity=_box_dict['velocity'] + [0],
+                    name=inverse_mapping[_box_dict['tracking_name']],
+                    token=_box_dict['sample_token'])
             new_item.append(new_box)
         
         new_results_dict[key] = new_item
+
+    print('loading total of {} boxes'.format(len(new_results_dict)))
             
 
     return new_results_dict

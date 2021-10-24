@@ -36,8 +36,12 @@ def single_gpu_visualize(model,
     for i, data in enumerate(data_loader):
         with torch.no_grad():
             result_tmp = model(return_loss=False, **data)
+        new_result_tmp = []
+        for _result_tmp in result_tmp:
+            if 'pts_bbox' in _result_tmp:
+                new_result_tmp.append(_result_tmp['pts_bbox'])
         
-        results.extend(result_tmp)
+        results.extend(new_result_tmp)
         if i > 100:
             break
         batch_size = len(result_tmp)
@@ -82,7 +86,12 @@ def multi_gpu_visualize(model, data_loader, out_dir=None,
         if i > 5000:
             break
         
-        results.extend(result_tmp)
+        new_result_tmp = []
+        for _result_tmp in result_tmp:
+            if 'pts_bbox' in _result_tmp:
+                new_result_tmp.append(_result_tmp['pts_bbox'])
+        
+        results.extend(new_result_tmp)
 
         batch_size = len(result_tmp)
         for _ in range(batch_size):

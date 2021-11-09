@@ -35,7 +35,7 @@ model = dict(
         pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
         max_num=100,
         num_classes=7),
-    fix_feats=False,
+    fix_feats=True,
     score_thresh=0.4,
     filter_score_thresh=0.35,
     qim_args=dict(
@@ -56,7 +56,7 @@ model = dict(
         type='ResNet',
         with_cp=False,
         #with_cp=True,
-        #pretrained='open-mmlab://detectron2/resnet50_caffe',
+        pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -227,7 +227,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=3,
+            num_frames_per_sample=5,
             data_root=data_root,
             ann_file=data_root + 'track_radar_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -274,6 +274,6 @@ evaluation = dict(interval=2)
 runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
-#load_from = 'work_dirs/track/2t/latest.pth'
+load_from = 'work_dirs/track_v2/baseline_res50_24ep_camradarpre/latest.pth'
 
 fp16 = dict(loss_scale='dynamic')

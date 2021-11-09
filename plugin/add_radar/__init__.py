@@ -4,6 +4,7 @@ from .dataset import NuScenesDatasetRadar
 from .attention import Detr3DCamRadarCrossAttenV2
 from .detector import Detr3DCamRadar
 from .head import DeformableDETR3DCamRadarHead
+from .vovnet import VoVNet
 from .transformer import Detr3DCamRadarTransformerDecoder, Detr3DCamRadarTransformer
 from .sparse_attention import Detr3DCamRadarSparseCrossAtten, Detr3DCamRadarSparseDynamicCrossAtten
 from .hungarian_assigner_3d_velo import HungarianAssigner3DVelo
@@ -17,5 +18,6 @@ __all__ = [
     'Detr3DCamRadarTransformer', 'Detr3DCamRadarTransformerDecoder',
     'Detr3DCamRadarSparseCrossAtten', 'Detr3DCamRadarSparseDynamicCrossAtten',
     'HungarianAssigner3DVelo', 'RadarPointEncoderXYAttn', 'LoadRadarPointsMultiSweeps', 
-    'Detr3DCamRadarOneMatchCrossAtten', 'Detr3DCrossAtten', 'Detr3DCamRadarCrossAtten'
+    'Detr3DCamRadarOneMatchCrossAtten', 'Detr3DCrossAtten', 'Detr3DCamRadarCrossAtten',
+    'VoVNet'
 ]

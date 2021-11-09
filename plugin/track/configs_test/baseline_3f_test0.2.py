@@ -36,8 +36,8 @@ model = dict(
         max_num=100,
         num_classes=7),
     fix_feats=False,
-    score_thresh=0.4,
-    filter_score_thresh=0.35,
+    score_thresh=0.2,
+    filter_score_thresh=0.15,
     qim_args=dict(
         qim_type='QIMBase',
         merger_dropout=0, update_query_pos=True,

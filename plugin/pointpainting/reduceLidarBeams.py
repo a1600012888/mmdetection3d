@@ -32,22 +32,26 @@ def reduce_LiDAR_beams(pts, reduce_beams_to=32):
 
     num_pts, _ = pts.size()
     mask = torch.zeros(num_pts)
-    for id in [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31]:
-        beam_mask = (theta < (beam_range[id-1]-0.012)) * (theta > (beam_range[id]-0.012))
-        mask = mask + beam_mask
-    mask = mask.bool()
-    points = copy.copy(pts)
-    points = points[mask]
+    if reduce_beams_to == 16:
+        for id in [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31]:
+            beam_mask = (theta < (beam_range[id-1]-0.012)) * (theta > (beam_range[id]-0.012))
+            mask = mask + beam_mask
+        mask = mask.bool()
+    elif reduce_beams_to == 4:
+        mask = (theta < (beam_range[7]-0.012)) * (theta > (beam_range[11]-0.012))
+    elif reduce_beams_to == 1:
+        mask = (theta <(beam_range[12]-0.012)) * (theta > (beam_range[13]-0.012))
+    points = pts[mask]
     return points
 
 
 @PIPELINES.register_module()
 class ReduceLiDARBeams(object):
-    
+
     def __init__(self, reduce_beams_to=32):
         self.reduce_beams_to = reduce_beams_to
         # self.chosen_beams = dict(
-        #    16: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31], 
+        #    16: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31],
         #    8: [],
         #    4: [])
 
@@ -59,7 +63,7 @@ class ReduceLiDARBeams(object):
         reduced_points = LiDARPoints(
             reduced_points, points_dim=pts.shape[-1], attribute_dims=None)
         results['points'] = reduced_points
-        
+
 
 @PIPELINES.register_module()
 class LoadReducedPaintedPointsFromMultiSweeps(object):

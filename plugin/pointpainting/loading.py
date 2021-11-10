@@ -136,7 +136,6 @@ class LoadPointsFromFilev2(object):
 
 
 
-
 @PIPELINES.register_module()
 class LoadPointsFromMultiSweepsv2(object):
     """Load points from multiple sweeps.

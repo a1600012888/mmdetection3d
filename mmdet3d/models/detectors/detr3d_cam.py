@@ -51,6 +51,7 @@ class Detr3DCam(MVXTwoStageDetector):
 
     def extract_img_feat(self, img, img_metas):
         """Extract features of images."""
+        # print(img.size())
         B = img.size(0)
         if self.with_img_backbone and img is not None:
             input_shape = img.shape[-2:]
@@ -66,6 +67,8 @@ class Detr3DCam(MVXTwoStageDetector):
             if self.use_grid_mask:
                 img = self.grid_mask(img)
             img_feats = self.img_backbone(img)
+            if isinstance(img_feats, dict):
+                img_feats = list(img_feats.values())
         else:
             return None
         if self.with_img_neck:

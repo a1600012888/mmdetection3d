@@ -169,6 +169,7 @@ db_sampler = dict(
             bicycle=5,
             pedestrian=5)),
     classes=class_names,
+    reduce_beams_to=16,
     sample_groups=dict(
         car=2,
         truck=3,
@@ -189,13 +190,11 @@ db_sampler = dict(
 
 train_pipeline = [
     dict(
-        type='LoadPointsFromFile',
+        type='LoadReducedPointsFromFile',
         coord_type='LIDAR',
         load_dim=5,
         use_dim=5,
-        file_client_args=file_client_args),
-    dict(
-        type='ReduceLiDARBeams',
+        file_client_args=file_client_args,
         reduce_beams_to=16),
     dict(type='LoadMultiViewImageFromFiles'),
     dict(
@@ -229,13 +228,11 @@ train_pipeline = [
 ]
 test_pipeline = [
     dict(
-        type='LoadPointsFromFile',
+        type='LoadReducedPointsFromFile',
         coord_type='LIDAR',
         load_dim=5,
         use_dim=5,
-        file_client_args=file_client_args),
-    dict(
-        type='ReduceLiDARBeams',
+        file_client_args=file_client_args,
         reduce_beams_to=16),
     dict(type='LoadMultiViewImageFromFiles'),
     dict(
@@ -294,7 +291,7 @@ eval_pipeline = [
 
 data = dict(
     samples_per_gpu=12,
-    workers_per_gpu=12,
+    workers_per_gpu=5,
     train=dict(
         type='CBGSDataset',
         dataset=dict(

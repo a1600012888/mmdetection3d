@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-sleep 3.5h
+sleep 3h
 CONFIG=$1
 GPUS=$2
 PORT=${PORT:-29402}

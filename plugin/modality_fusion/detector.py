@@ -8,6 +8,7 @@ from mmdet3d.models.utils.grid import GridMask
 
 from torchvision import utils as vutils
 from .utils import get_pts_bev
+from .save_rangeview import save_rangeview
 
 @DETECTORS.register_module()
 class Detr3DCamModalityFusion(MVXTwoStageDetector):
@@ -79,6 +80,8 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
                 img = self.grid_mask(img)
             img.requires_grad = True
             img_feats = self.img_backbone(img)
+            if isinstance(img_feats, dict):
+                img_feats = list(img_feats.values())
         else:
             return None
         if self.with_img_neck:
@@ -96,12 +99,12 @@ class Detr3DCamModalityFusion(MVXTwoStageDetector):
         #print('input img', img.size())
         #print('img_feats', len(img_feats))
         #for i in range(4):
-        #    print(i, img_feats[i].size())
+        #    print('img', i, img_feats[i].size())
         
         pts_feats = self.extract_pts_feat(points)
         #print('pts_feats', len(pts_feats))
         #for i in range(4):
-        #    print(i, pts_feats[i].size())
+        #    print('pts', i, pts_feats[i].size())
         #print
         return (img_feats, pts_feats)
 
@@ -361,7 +364,8 @@ class Detr3DCamPoint(MVXTwoStageDetector):
     def extract_feat(self, points, img, img_metas):
         """Extract features from images and points."""
         #img_feats = self.extract_img_feat(img, img_metas)
-        print(points.size())
+        #print(points.size())
+        #save_rangeview(points)
         pts_feats = self.extract_pts_feat(points)
         #print('pts_feats', len(pts_feats))
         #for i in range(4):
@@ -430,7 +434,7 @@ class Detr3DCamPoint(MVXTwoStageDetector):
         Returns:
             dict: Losses of different branches.
         """
-        
+        # print(points[0].size())
         img_feats, pts_feats = self.extract_feat(points, img=img, img_metas=img_metas)
         losses = dict()
         pts_feats = [feat.unsqueeze(dim=1) for feat in pts_feats]
@@ -577,3 +581,4 @@ class Detr3DCamPoint(MVXTwoStageDetector):
         pts_bbox = self.aug_test_pts(img_feats, img_metas, rescale)
         bbox_list.update(pts_bbox=pts_bbox)
         return [bbox_list]
+

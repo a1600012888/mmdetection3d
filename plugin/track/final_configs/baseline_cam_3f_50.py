@@ -18,7 +18,7 @@ class_names = [
 ]
 
 input_modality = dict(
-    use_lidar=True,
+    use_lidar=False,
     use_camera=True,
     use_radar=False,
     use_map=False,
@@ -50,13 +50,13 @@ model = dict(
     radar_encoder=dict(
         type='RadarPointEncoderXY',
         in_channels=13,
-        out_channels=[32, 32, 64],
+        out_channels=[32],
         norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.01),),
     img_backbone=dict(
         type='ResNet',
         with_cp=False,
         #with_cp=True,
-        pretrained='open-mmlab://detectron2/resnet50_caffe',
+        #pretrained='open-mmlab://detectron2/resnet50_caffe',
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
@@ -116,12 +116,11 @@ model = dict(
                             num_heads=8,
                             dropout=0.1),
                         dict(
-                            type='Detr3DCamRadarCrossAtten',
+                            type='Detr3DCrossAtten',
                             pc_range=point_cloud_range,
                             num_points=1,
                             embed_dims=256,
-                            radar_topk=30,
-                            radar_dims=64)
+                            )
                     ],
                     feedforward_channels=512,
                     ffn_dropout=0.1,
@@ -182,9 +181,9 @@ train_pipeline = [
     dict(
         type='LoadRadarPointsMultiSweeps',
         load_dim=18,
-        sweeps_num=4,
+        sweeps_num=1,
         use_dim=radar_use_dims,
-        max_num=1200, ),
+        max_num=100, ),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
     dict(type='InstanceRangeFilter', point_cloud_range=point_cloud_range),
     #dict(type='ObjectNameFilter', classes=class_names),
@@ -206,9 +205,9 @@ test_pipeline = [
     dict(
         type='LoadRadarPointsMultiSweeps',
         load_dim=18,
-        sweeps_num=4,
+        sweeps_num=1,
         use_dim=radar_use_dims,
-        max_num=1200, ),
+        max_num=100, ),
     dict(type='Normalize3D', **img_norm_cfg),
     dict(type='Pad3D', size_divisor=32),
 ]
@@ -227,7 +226,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=5,
+            num_frames_per_sample=3,
             data_root=data_root,
             ann_file=data_root + 'track_radar_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -256,24 +255,22 @@ optimizer = dict(
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
-            'offsets': dict(lr_mult=0.1),
-            'reference_points': dict(lr_mult=0.1)
         }),
     weight_decay=0.01)
-optimizer_config = dict(grad_clip=dict(max_norm=105, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[8, 11])
-total_epochs = 12
-evaluation = dict(interval=2)
+    step=[20, 23])
+total_epochs = 24
+evaluation = dict(interval=4)
 
-runner = dict(type='EpochBasedRunner', max_epochs=12)
+runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = True
-load_from = 'work_dirs/track_v2/baseline_res50_24ep_camradarpre/latest.pth'
+#load_from = 'work_dirs/models/detr3d_resnet101.pth'
 
 fp16 = dict(loss_scale='dynamic')

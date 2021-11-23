@@ -4210,3 +4210,8 @@ Traceback (most recent call last):
   File "/home/chenxy/anaconda3/envs/open-mmlab/lib/python3.8/site-packages/torch/distributed/launch.py", line 301, in sigkill_handler
     raise subprocess.CalledProcessError(returncode=last_return_code, cmd=cmd)
 subprocess.CalledProcessError: Command '['/home/chenxy/anaconda3/envs/open-mmlab/bin/python3', '-u', 'tools/train.py', '--local_rank=0', 'plugin/pointpainting/configs/htc_r50_fpn_painting2.py', '--launcher', 'pytorch']' returned non-zero exit status 1.
+plugin.modality_fusion
+torch.Size([1, 1200, 14])
+Killing subprocess 33199
+Killing subprocess 42333
+Main process received SIGINT, exiting

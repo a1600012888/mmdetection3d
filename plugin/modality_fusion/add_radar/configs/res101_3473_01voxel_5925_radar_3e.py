@@ -346,7 +346,7 @@ data = dict(
 
 optimizer = dict(
     type='AdamW',
-    lr=2e-4,
+    lr=2e-5,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),
@@ -365,11 +365,12 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=50,
     warmup_ratio=1.0 / 3,
-    step=[4])
-total_epochs = 5
+    step=[2])
+total_epochs = 1
 evaluation = dict(interval=1, pipeline=eval_pipeline)
 
-runner = dict(type='EpochBasedRunner', max_epochs=5)
+runner = dict(type='EpochBasedRunner', max_epochs=1)
 
 find_unused_parameters = False
-load_from='/public/MARS/models/surrdet/pts_img_radar_models/img_radar_3504_01voxel_q6_epoch_38_5931.pth'
+#load_from='/public/MARS/models/surrdet/pts_img_radar_models/img_radar_3504_01voxel_q6_epoch_38_5931.pth'
+load_from = '/home/chenxy/mmdetection3d/work_dirs/res101_3473_01voxel_5925_radar_5e/epoch_2.pth'

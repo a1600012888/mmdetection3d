@@ -24,6 +24,7 @@ from .detr3d.detr3d_head import Detr3DHead
 from .detr3d.detr3d_transformer import Detr3DTransformer, Detr3DTransformerDecoder, Detr3DCrossAtten
 from .detr3d.nms_free_coder import NMSFreeCoder
 from .detr3d.vovnet import VoVNet
+from .detr3d.vovonet_cp import VoVNetCP
 from .detr3d.pipelines.transform_3d import PhotoMetricDistortionMultiViewImage, CropMultiViewImage, PadMultiViewImage, NormalizeMultiviewImage, RandomScaleImageMultiViewImage, HorizontalRandomFlipMultiViewImage 
 from .add_radar.dataset import NuScenesDatasetRadar
 from .add_radar.attention_radar import Detr3DCamPtsRadarCrossAtten

@@ -410,9 +410,26 @@ def feature_sampling(mlvl_feats, reference_points, pc_range, img_metas):
     reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
     reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
     reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
+    B, num_query = reference_points.size()[:2]
+    '''
+    # inverse rotate, scale and translate
+    for i in range(B):
+        if 'pcd_trans' in img_metas[i]:
+            pcd_trans = torch.from_numpy(img_metas[i]['pcd_trans']).cuda()
+            #print('pcd_trans', pcd_trans)
+            reference_points[i, :, :3] -= pcd_trans
+        if 'pcd_scale_factor' in img_metas[i]:
+            pcd_scale_factor = img_metas[i]['pcd_scale_factor']
+            #print('pcd_scale', pcd_scale_factor)
+            reference_points[i, :, :3] /= pcd_scale_factor
+        if 'pcd_rotation' in img_metas[i]:
+            pcd_rotation = img_metas[i]['pcd_rotation'].cuda()
+            #print('pcd_rotation', pcd_rotation)
+            reference_points[i, :, :3] = torch.matmul(reference_points[i], torch.linalg.inv(pcd_rotation))
+    '''
     # reference_points (B, num_queries, 4)
     reference_points = torch.cat((reference_points, torch.ones_like(reference_points[..., :1])), -1)
-    B, num_query = reference_points.size()[:2]
+    
     num_cam = lidar2img.size(1)
     # ref_point change to (B, num_cam, num_query, 4, 1)
     reference_points = reference_points.view(B, 1, num_query, 4).repeat(1, num_cam, 1, 1).unsqueeze(-1)

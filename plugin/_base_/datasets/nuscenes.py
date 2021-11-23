@@ -439,8 +439,9 @@ class NuScenesDataset2(Custom3DDataset):
             format(len(results), len(self)))
 
         if jsonfile_prefix is None:
-            tmp_dir = tempfile.TemporaryDirectory()
-            jsonfile_prefix = osp.join(tmp_dir.name, 'results')
+            #tmp_dir = tempfile.TemporaryDirectory()
+            tmp_dir = 'eval_results'
+            jsonfile_prefix = osp.join(tmp_dir, 'results')
         else:
             tmp_dir = None
 

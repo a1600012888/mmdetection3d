@@ -74,7 +74,7 @@ def save_rangeview(pts):
     y_img = y_img.round().long()
     x_img = (theta + 1.2) * 1000
     x_img = x_img.round().long()
-    im[x_img, y_img] = rgb[i]
+    im[x_img, y_img] = 1
     #for i in [-1, 0, 1]:
     #    for j in [-1, 0, 1]:
     #        im[(x_img.long()+i).clamp(min=0, max=2000), 

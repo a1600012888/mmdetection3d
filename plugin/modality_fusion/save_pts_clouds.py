@@ -21,13 +21,14 @@ from matplotlib import rcParams
 from matplotlib.axes import Axes
 from pyquaternion import Quaternion
 from tqdm import tqdm
+from shutil import copyfile
 
 from nuscenes.utils.data_classes import LidarPointCloud
 from nuscenes.utils.geometry_utils import view_points
 
 
-sample_id = 0
-pc_range = [-54, -54, -0.4, 54, 54, -0.25]
+sample_id = 55
+pc_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 
 
 rgb = torch.zeros(100, 3)
@@ -88,8 +89,8 @@ def map_pointcloud_to_image(nusc,
     #pc = LidarPointCloud.from_file(pcl_path)
     #pc = LidarPointCloud(pts.T)
     pc = pts
-    im = Image.open(osp.join(nusc.dataroot, cam['filename']))
-
+    #im = Image.open(osp.join(nusc.dataroot, cam['filename']))
+    im = Image.open('saved_imgs/rendered_CAM_FRONT_55.jpg')
     # Points live in the point sensor frame. So they need to be transformed via global to the image plane.
     # First step: transform the pointcloud to the ego vehicle frame for the timestamp of the sweep.
     cs_record = nusc.get('calibrated_sensor', pointsensor['calibrated_sensor_token'])
@@ -191,8 +192,8 @@ def render_pointcloud_in_image(nusc,
             fig.canvas.set_window_title(sample_token + '(predictions)')
         else:
             fig.canvas.set_window_title(sample_token)
-    else:  # Set title on if rendering as part of render_sample.
-        ax.set_title(camera_channel)
+    #else:  # Set title on if rendering as part of render_sample.
+    #    ax.set_title(camera_channel)
     ax.imshow(im)
     ax.scatter(points[0, :], points[1, :], c=coloring, s=dot_size)
     ax.axis('off')
@@ -231,17 +232,6 @@ def save_pts_clouds(filename):
     #mask = mask * mask2
     #mask = torch.logical_not(mask)
     phi = torch.atan2(pts[:, 1], pts[:, 0])
-    '''
-    mask1 = (theta > 0.18)
-    im = paint_beams(im, theta[mask1], phi[mask1], 1)
-
-    mask = (theta < 0.18)
-    sine_theta = sine_theta[mask]
-    theta = theta[mask]
-    phi = phi[mask]
-    pts = pts[mask]
-    print('theta', theta.max(), theta.min())
-    '''
 
     top_ang = 0.1862
     down_ang = -0.5353
@@ -268,7 +258,9 @@ def save_pts_clouds(filename):
     num_pts, _ = pts.size()
     mask = torch.zeros(num_pts)
     #for id in [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31]:
-    for id in [8, 9, 10, 11]:
+    chosen_beam_id = 9
+    #mask = (theta <(beam_range[chosen_beam_id-1]-0.012)) * (theta > (beam_range[chosen_beam_id]-0.012))
+    for id in [7, 9, 11, 13]:
         beam_mask = (theta < (beam_range[id-1]-0.012)) * (theta > (beam_range[id]-0.012))
         mask = mask + beam_mask
     mask = mask.bool()
@@ -277,6 +269,7 @@ def save_pts_clouds(filename):
     pts = pts[mask]
     theta = theta[mask]
 
+    '''
     y_img = (phi + math.pi) * 1000 / math.pi
     y_img = y_img.round()
     #print('x_img', x_img.max(), x_img.min())
@@ -291,7 +284,7 @@ def save_pts_clouds(filename):
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     #saved_root = '/home/chenxy/mmdetection3d/'
     vutils.save_image(im, 'rangeview/' + 'sample' + str(sample_id) + '.jpg')
-
+    '''
     #pts = pts[mask]
     pts = pts.numpy()
     """
@@ -315,6 +308,88 @@ def save_pts_clouds(filename):
     """
     return pts
 
+def save_bev(filename):
+    pts = np.fromfile(filename, dtype=np.float32)
+    pts = pts.reshape(-1, 5)
+    
+    pts = torch.from_numpy(pts)
+    print(pts.size())
+    mask = ((pts[:, 0] > pc_range[0]) & (pts[:, 0] < pc_range[3]) & 
+        (pts[:, 1] > pc_range[1]) & (pts[:, 1] < pc_range[4]) &
+        (pts[:, 2] > pc_range[2]) & (pts[:, 2] < pc_range[5]))
+    pts = pts[mask]
+    # x = r * cos(theta) * cos(phi)
+    # y = r * cos(theta) * sin(phi)
+    # z = r * sin(theta)
+    pts_3d = pts[:, :3]
+
+    radius = torch.sqrt(pts[:, 0].pow(2) + pts[:, 1].pow(2) + pts[:, 2].pow(2))
+    sine_theta = pts[:, 2] / radius
+    # [-pi/2, pi/2]
+    theta = torch.asin(sine_theta)
+    print('theta', theta.max(), theta.min())
+    
+    phi = torch.atan2(pts[:, 1], pts[:, 0])
+
+    res = 0.1
+    x_max = 1 + int((pc_range[3] - pc_range[0]) / res)
+    y_max = 1 + int((pc_range[4] - pc_range[1]) / res)
+    im = torch.zeros(x_max, y_max, 3)
+
+    top_ang = 0.1862
+    down_ang = -0.5353
+
+    beam_range = torch.zeros(32)
+    beam_range[0] = top_ang
+    beam_range[31] = down_ang
+    for i in range(1, 31):
+        beam_range[i] = beam_range[i-1] - 0.023275
+    #beam_range = [1, 0.18, 0.15, 0.13, 0.11, 0.085, 0.065, 0.03, 0.01, -0.01, -0.03, -0.055, -0.08, -0.105, -0.13, -0.155, -0.18, -0.205, -0.228, -0.251, -0.275,
+    #                -0.295, -0.32, -0.34, -0.36, -0.38, -0.40, -0.425, -0.45, -0.47, -0.49, -0.52, -0.54]
+
+    num_pts, _ = pts.size()
+    mask = torch.zeros(num_pts)
+    chosen_beam_id = 9
+    mask = (theta <(beam_range[chosen_beam_id-1]-0.012)) * (theta > (beam_range[chosen_beam_id]-0.012))
+    '''
+    for id in [7, 9, 11, 13]:
+        beam_mask = (theta < (beam_range[id-1]-0.012)) * (theta > (beam_range[id]-0.012))
+        mask = mask + beam_mask
+    mask = mask.bool()
+    '''
+    '''
+    
+    #for id in [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31]:
+    for id in [8, 9, 10, 11]:
+        beam_mask = (theta < (beam_range[id-1]-0.012)) * (theta > (beam_range[id]-0.012))
+        mask = mask + beam_mask
+    mask = mask.bool()
+    #mask = torch.logical_not(mask)
+    phi = phi[mask]
+    pts = pts[mask]
+    theta = theta[mask]
+    '''
+    pts = pts[mask]
+    x_img = (pts[:, 0] + pc_range[3]) / res
+    x_img = x_img.round().long()
+    y_img = (pts[:, 1] + pc_range[4]) / res
+    y_img = y_img.round().long()
+    im[x_img, y_img, :] = 1 
+    '''
+    for i in [-1, 0, 1]:
+        for j in [-1, 0, 1]:
+            im[(x_img.long()+i).clamp(min=0, max=x_max), 
+                (y_img.long()+j).clamp(min=0, max=y_max), :] = 1
+    '''
+
+    im = im.permute(2, 0, 1)
+    timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+    #saved_root = '/home/chenxy/mmdetection3d/'
+    vutils.save_image(im, 'saved_bev/' + 'sample' + str(sample_id) + '_1' + '.png')
+
+
+    
+
 data_root = '/home/chenxy/centerpoint/mmdetection3d/data/nuscenes/'
 cameras = ['CAM_FRONT', 'CAM_BACK', 'CAM_BACK_LEFT', 'CAM_FRONT_LEFT', 
             'CAM_FRONT_RIGHT', 'CAM_BACK_RIGHT']
@@ -322,21 +397,38 @@ cameras = ['CAM_FRONT', 'CAM_BACK', 'CAM_BACK_LEFT', 'CAM_FRONT_LEFT',
 nusc = NuScenes(version='v1.0-mini', dataroot=data_root, verbose=True)
 my_sample = nusc.sample[sample_id]
 #print(my_sample, len(nusc.sample))
-
+'''
+for cam in cameras:
+    img_data = nusc.get('sample_data', my_sample['data'][cam])
+    img_filename = img_data['filename']
+    copyfile(data_root+img_filename, 'saved_imgs/'+str(sample_id)+cam+'.jpg')
+'''
 LiDAR_data = nusc.get('sample_data', my_sample['data']['LIDAR_TOP'])
 pts_filename = LiDAR_data['filename']
+
+#cam_front_data = nusc.get('sample_data', my_sample['data']['CAM_FRONT'])
+#nusc.render_sample_data(cam_front_data['token'], out_path='saved_imgs/rendered_CAM_FRONT_55.jpg')
+
 #print(LiDAR_data)
 
+#save_bev(data_root + pts_filename)
 pts = save_pts_clouds(data_root + pts_filename)
+
 #print('ego_pts', type(ego_pts), ego_pts.shape)
+#pts = np.fromfile(data_root+pts_filename, dtype=np.float32)
+#pts = pts.reshape(-1, 5)
 pts = pts[:, :4]
 pts = LidarPointCloud(pts.T)
 
+render_pointcloud_in_image(nusc, pts, my_sample['token'], pointsensor_channel='LIDAR_TOP', 
+            camera_channel='CAM_FRONT', out_path='rendered_imgs/' + 'sample' + str(sample_id) + 'CAM_FRONT_4' + '.png')
+
+'''
 for i in range(len(cameras)):
-    nusc.render_pointcloud_in_image(my_sample['token'], pointsensor_channel='LIDAR_TOP', 
-                camera_channel=cameras[i], out_path='rendered_imgs/' + 'sample' + str(sample_id) + cameras[i] + '.png')
+    #nusc.render_pointcloud_in_image(my_sample['token'], pointsensor_channel='LIDAR_TOP', 
+    #            camera_channel=cameras[i], out_path='rendered_imgs/' + 'sample' + str(sample_id) + cameras[i] + '.png')
     sample_record = nusc.get('sample', my_sample['token'])
     points = copy.deepcopy(pts)
     render_pointcloud_in_image(nusc, points, my_sample['token'], pointsensor_channel='LIDAR_TOP', 
                 camera_channel=cameras[i], out_path='rendered_imgs/' + 'sample' + str(sample_id) + '_ego_' + cameras[i] + '.png')
-
+'''

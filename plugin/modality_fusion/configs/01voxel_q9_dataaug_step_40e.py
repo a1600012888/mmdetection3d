@@ -196,7 +196,7 @@ train_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
-    dict(type='LoadMultiViewImageFromFiles'),
+    #dict(type='LoadMultiViewImageFromFiles'),
     dict(
         type='LoadPointsFromMultiSweeps',
         sweeps_num=9,
@@ -220,10 +220,10 @@ train_pipeline = [
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
     dict(type='PointShuffle'),
-    dict(type='Normalize3D', **img_norm_cfg),
-    dict(type='Pad3D', size_divisor=32),
+    #dict(type='Normalize3D', **img_norm_cfg),
+    #dict(type='Pad3D', size_divisor=32),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
-    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d', 'img'])
+    dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d'])
 ]
 test_pipeline = [
     dict(
@@ -232,7 +232,7 @@ test_pipeline = [
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
-    dict(type='LoadMultiViewImageFromFiles'),
+    #dict(type='LoadMultiViewImageFromFiles'),
     dict(
         type='LoadPointsFromMultiSweeps',
         sweeps_num=9,
@@ -240,8 +240,8 @@ test_pipeline = [
         file_client_args=file_client_args,
         pad_empty_sweeps=True,
         remove_close=True),
-    dict(type='Normalize3D', **img_norm_cfg),
-    dict(type='Pad3D', size_divisor=32),
+    #dict(type='Normalize3D', **img_norm_cfg),
+    #dict(type='Pad3D', size_divisor=32),
     #revise
     dict(
         type='MultiScaleFlipAug3D',
@@ -259,7 +259,7 @@ test_pipeline = [
                 type='DefaultFormatBundle3D',
                 class_names=class_names,
                 with_label=False),
-            dict(type='Collect3D', keys=['points', 'img'])
+            dict(type='Collect3D', keys=['points'])
         ])
 ]
 
@@ -287,7 +287,7 @@ eval_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=8,
+    samples_per_gpu=6,
     workers_per_gpu=8,
     train=dict(
         type='CBGSDataset',
@@ -310,7 +310,7 @@ data = dict(
 
 optimizer = dict(
     type='AdamW',
-    lr=2e-4,
+    lr=(3e-4)/2,
     paramwise_cfg=dict(
         custom_keys={
             'img_backbone': dict(lr_mult=0.1),

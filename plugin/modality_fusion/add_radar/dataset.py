@@ -169,6 +169,7 @@ class NuScenesDatasetRadar(Custom3DDataset):
         data = mmcv.load(ann_file)
         data_infos = list(sorted(data['infos'], key=lambda e: e['timestamp']))
         data_infos = data_infos[::self.load_interval]
+        #data_infos = data_infos[:2]
         self.metadata = data['metadata']
         self.version = self.metadata['version']
         return data_infos

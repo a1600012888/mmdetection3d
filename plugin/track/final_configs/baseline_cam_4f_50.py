@@ -57,7 +57,7 @@ model = dict(
         with_cp=False,
         #with_cp=True,
         #pretrained='open-mmlab://detectron2/resnet50_caffe',
-        depth=101,
+        depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
@@ -226,7 +226,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=3,
+            num_frames_per_sample=5,
             data_root=data_root,
             ann_file=data_root + 'track_radar_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -266,11 +266,11 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     step=[20, 23])
 total_epochs = 24
-evaluation = dict(interval=4)
+evaluation = dict(interval=2)
 
 runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = True
-load_from = 'work_dirs/models/res101_1f_24ep.pth'
+load_from = 'work_dirs/models/res50_3f_48ep.pth'
 
 fp16 = dict(loss_scale='dynamic')

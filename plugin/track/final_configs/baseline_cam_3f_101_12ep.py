@@ -264,13 +264,13 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[20, 23])
-total_epochs = 24
+    step=[10, 11])
+total_epochs = 12
 evaluation = dict(interval=4)
 
-runner = dict(type='EpochBasedRunner', max_epochs=24)
+runner = dict(type='EpochBasedRunner', max_epochs=12)
 
 find_unused_parameters = True
-load_from = 'work_dirs/models/res101_1f_24ep.pth'
+load_from = 'work_dirs/final/detr3d_1f_24eppre_res101_3f_24ep/latest.pth'
 
 fp16 = dict(loss_scale='dynamic')

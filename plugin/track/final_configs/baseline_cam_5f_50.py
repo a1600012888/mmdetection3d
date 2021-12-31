@@ -266,11 +266,11 @@ lr_config = dict(
     warmup_ratio=1.0 / 3,
     step=[20, 23])
 total_epochs = 24
-evaluation = dict(interval=4)
+evaluation = dict(interval=2)
 
 runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = True
-#load_from = 'work_dirs/models/detr3d_resnet101.pth'
+load_from = 'work_dirs/models/res50_3f_48ep.pth'
 
 fp16 = dict(loss_scale='dynamic')

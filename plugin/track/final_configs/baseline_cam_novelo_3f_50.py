@@ -25,7 +25,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamTrackerPlusLidarVelo',
+    type='Detr3DCamTrackerPlusNoVelo',
     use_grid_mask=True,  # use grid mask
     num_classes=7,
     num_query=300,
@@ -57,7 +57,7 @@ model = dict(
         with_cp=False,
         #with_cp=True,
         #pretrained='open-mmlab://detectron2/resnet50_caffe',
-        depth=101,
+        depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
@@ -257,7 +257,7 @@ optimizer = dict(
             'img_backbone': dict(lr_mult=0.1),
         }),
     weight_decay=0.01)
-optimizer_config = dict(grad_clip=dict(max_norm=105, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
@@ -271,6 +271,6 @@ evaluation = dict(interval=4)
 runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = True
-load_from = 'work_dirs/models/res101_1f_24ep.pth'
+load_from = 'work_dirs/models/res50_final_1f_pretrain24ep.pth'
 
 fp16 = dict(loss_scale='dynamic')

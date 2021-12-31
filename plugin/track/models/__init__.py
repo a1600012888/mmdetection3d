@@ -18,5 +18,8 @@ from .radar_encoder import RADAR_ENCODERS, build_radar_encoder
 
 from .head_plus_raw import DeformableDETR3DCamHeadTrackPlusRaw
 from .tracker_plus_lidar_velo import Detr3DCamTrackerPlusLidarVelo
+from .tracker_plus_lidar_velo_extra_refine import Detr3DCamTrackerPlusLidarVeloExtraRefine
+from .tracker_plus_no_velo import Detr3DCamTrackerPlusNoVelo
+from .tracker_plus_lidar_velo_det_test import Detr3DCamTrackerPlusLidarVeloTestDet
 
 from .attention_dert3d import Detr3DCrossAtten, Detr3DCamRadarCrossAtten

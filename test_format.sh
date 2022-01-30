@@ -1,0 +1,1 @@
+python3 tools/test.py plugin/track/final_configs/baseline_cam_3f_50.py work_dirs/final_track/res50_imgnet_pretrain_24ep_1f_3f_24ep_re+24ep/epoch_20.pth  --format-only  --eval-options jsonfile_prefix=work_dirs/test_code_results/

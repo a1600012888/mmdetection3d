@@ -76,6 +76,7 @@ class ClipMatcher(nn.Module):
         self.matcher = build_assigner(assigner)
         self.loss_cls = build_loss(loss_cls)
         self.loss_bboxes = build_loss(loss_bbox)
+        self.loss_predictions = nn.SmoothL1Loss(reduction='none', beta=1.0)
         self.register_buffer('code_weights', torch.tensor(code_weights,
                                                           requires_grad=False))
 
@@ -380,3 +381,52 @@ class ClipMatcher(nn.Module):
         for loss_name, loss in losses.items():
             losses[loss_name] /= num_samples
         return losses
+
+    
+    def prediction_loss(self, track_instances, predictions):
+        
+        decay_ratio = 1.0
+        for i in range(self._current_frame_idx, len(self.gt_instances)):
+            gt_instances_i = self.gt_instances[i]  # gt instances of i-th image.
+            
+            pred_boxes_i = predictions[i - self._current_frame_idx]
+
+            obj_idxes = gt_instances_i.obj_ids
+            obj_idxes_list = obj_idxes.detach().cpu().numpy().tolist()
+            obj_idx_to_gt_idx = {obj_idx: gt_idx for gt_idx, obj_idx in enumerate(obj_idxes_list)}
+
+            num_paired = 0
+            for j in range(len(track_instances)):
+                obj_id = track_instances.obj_idxes[j].item()
+                # set new target idx.
+                if obj_id >= 0:
+                    if obj_id in obj_idx_to_gt_idx:
+                        track_instances.matched_gt_idxes[j] = obj_idx_to_gt_idx[obj_id]
+                        num_paired += 1
+                    else:
+                        track_instances.matched_gt_idxes[j] = -1  # track-disappear case.
+                else:
+                    track_instances.matched_gt_idxes[j] = -1
+
+            if num_paired > 0:
+                if_paired_i = track_instances.matched_gt_idxes >= 0
+
+                paired_pred_boxes_i = pred_boxes_i[if_paired_i]
+
+                paired_gt_instances = gt_instances_i[track_instances.matched_gt_idxes[if_paired_i]]
+                normalized_bboxes = paired_gt_instances.boxes
+                cx = normalized_bboxes[..., 0:1]
+                cy = normalized_bboxes[..., 1:2]
+                cz = normalized_bboxes[..., 4:5]
+
+                gt_boxes_i = torch.cat([cx, cy, cz], dim=-1)
+
+                pred_loss_i = 0.2 * decay_ratio * self.loss_predictions(paired_pred_boxes_i, gt_boxes_i).sum(dim=-1).mean()
+
+                self.losses_dict['pred_loss_{}'.format(i)] = pred_loss_i
+            else:
+                self.losses_dict['pred_loss_{}'.format(i)] = torch.tensor([0.0]).cuda()
+            
+            decay_ratio = decay_ratio * 0.5
+                
+

@@ -25,7 +25,7 @@ input_modality = dict(
     use_external=False)
 
 model = dict(
-    type='Detr3DCamTrackerPlusLidarVelo',
+    type='Detr3DCamTrackerPlusLidarVeloTestDet',
     use_grid_mask=True,  # use grid mask
     num_classes=7,
     num_query=300,
@@ -36,7 +36,7 @@ model = dict(
         max_num=100,
         num_classes=7),
     fix_feats=False,
-    score_thresh=0.4,
+    score_thresh=0.35,
     filter_score_thresh=0.35,
     qim_args=dict(
         qim_type='QIMBase',
@@ -57,7 +57,7 @@ model = dict(
         with_cp=False,
         #with_cp=True,
         #pretrained='open-mmlab://detectron2/resnet50_caffe',
-        depth=50,
+        depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
@@ -257,7 +257,7 @@ optimizer = dict(
             'img_backbone': dict(lr_mult=0.1),
         }),
     weight_decay=0.01)
-optimizer_config = dict(grad_clip=dict(max_norm=105, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',

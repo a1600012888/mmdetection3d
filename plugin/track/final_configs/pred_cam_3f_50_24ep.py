@@ -24,11 +24,16 @@ input_modality = dict(
     use_map=False,
     use_external=False)
 
+num_frame = 3
+num_pred = 4
+
 model = dict(
-    type='Detr3DCamTrackerPlusLidarVelo',
+    type='Detr3DCamTrackerPlusLidarVeloPred',
     use_grid_mask=True,  # use grid mask
     num_classes=7,
     num_query=300,
+    num_frame=num_frame,
+    num_pred=num_pred,
     bbox_coder=dict(
         type='DETRTrack3DCoder',
         post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
@@ -226,7 +231,7 @@ data = dict(
     workers_per_gpu=4,
     train=dict(
             type=dataset_type,
-            num_frames_per_sample=3,
+            num_frames_per_sample=num_frame + num_pred - 1,
             data_root=data_root,
             ann_file=data_root + 'track_radar_infos_train.pkl',
             pipeline_single=train_pipeline,
@@ -257,7 +262,7 @@ optimizer = dict(
             'img_backbone': dict(lr_mult=0.1),
         }),
     weight_decay=0.01)
-optimizer_config = dict(grad_clip=dict(max_norm=105, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
@@ -271,6 +276,7 @@ evaluation = dict(interval=4)
 runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = True
-#load_from = 'work_dirs/models/detr3d_resnet101.pth'
+#load_from = 'work_dirs/models/res50_imgnet_pretrain_24ep_1f.pth'
+load_from = 'work_dirs/final_track/res50_imgnet_pretrain_24ep_1f_re/epoch_24.pth'
 
 fp16 = dict(loss_scale='dynamic')

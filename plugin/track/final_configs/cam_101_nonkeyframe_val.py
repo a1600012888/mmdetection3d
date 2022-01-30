@@ -24,8 +24,9 @@ input_modality = dict(
     use_map=False,
     use_external=False)
 
+#miss_tolerance is fixed for 5
 model = dict(
-    type='Detr3DCamTrackerPlusLidarVelo',
+    type='Detr3DCamTrackerPlusLidarVeloFullFrame',
     use_grid_mask=True,  # use grid mask
     num_classes=7,
     num_query=300,
@@ -57,7 +58,7 @@ model = dict(
         with_cp=False,
         #with_cp=True,
         #pretrained='open-mmlab://detectron2/resnet50_caffe',
-        depth=50,
+        depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
@@ -165,7 +166,7 @@ model = dict(
 
 # x y z rcs vx vy vx_comp vy_comp x_rms y_rms vx_rms vy_rms
 radar_use_dims = [0, 1, 2, 5, 6, 7, 8, 9, 12, 13, 16, 17, 18]
-dataset_type = 'NuScenesTrackDatasetRadar'
+dataset_type = 'NuScenesTrackDatasetNonKeyFrame'
 data_root = 'data/nuscenes/'
 
 file_client_args = dict(backend='disk')
@@ -240,12 +241,12 @@ data = dict(
             box_type_3d='LiDAR'),
     # ),
     val=dict(type=dataset_type, pipeline_single=test_pipeline, pipeline_post=test_pipeline_post, classes=class_names, modality=input_modality,
-             ann_file=data_root + 'track_radar_infos_val.pkl',
+             ann_file=data_root + 'track_cam_nokey_val_infos_val.pkl',
              num_frames_per_sample=1,),
     test=dict(type=dataset_type, pipeline_single=test_pipeline,
               pipeline_post=test_pipeline_post,
               classes=class_names, modality=input_modality,
-              ann_file=data_root + 'track_radar_infos_val.pkl',
+              ann_file=data_root + 'track_cam_nokey_val_infos_val.pkl',
               num_frames_per_sample=1,))
 
 optimizer = dict(
@@ -257,7 +258,7 @@ optimizer = dict(
             'img_backbone': dict(lr_mult=0.1),
         }),
     weight_decay=0.01)
-optimizer_config = dict(grad_clip=dict(max_norm=105, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',

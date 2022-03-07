@@ -74,7 +74,12 @@ def make_sensor_pred_videos(sample_tokens: list,
         out_path = os.path.join(out_img_dir, '{}.png'.format(i))
         out_img_paths.append(out_path)
         results = results_dict[key]
+        track_inds = []
+        for res in results:
+            track_inds.append(res.track_ind)
+        print('len boxes', len(results))
         nusc_explorer.render_sample_pred(
+            # asample_token, [], out_path=out_path)
             sample_token, results, out_path=out_path)
     
     img_cat_list = []

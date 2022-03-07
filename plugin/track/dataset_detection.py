@@ -16,7 +16,7 @@ from pyquaternion import Quaternion
 
 
 @DATASETS.register_module()
-class NuScenesTrackDatasetRadar(Dataset):
+class NuScenesDetTest(Dataset):
     r"""NuScenes Dataset.
 
     This class serves as the API for experiments on the NuScenes Dataset.
@@ -558,29 +558,27 @@ class NuScenesTrackDatasetRadar(Dataset):
                     elif name in ['bicycle', 'motorcycle']:
                         attr = 'cycle.with_rider'
                     else:
-                        attr = NuScenesTrackDatasetRadar.DefaultAttribute[name]
+                        attr = NuScenesDetTest.DefaultAttribute[name]
                 else:
                     if name in ['pedestrian']:
                         attr = 'pedestrian.standing'
                     elif name in ['bus']:
                         attr = 'vehicle.stopped'
                     else:
-                        attr = NuScenesTrackDatasetRadar.DefaultAttribute[name]
+                        attr = NuScenesDetTest.DefaultAttribute[name]
 
-                center_ = box.center.tolist()
-                center_[2] = center_[2] + box.wlh.tolist()[2]
                 nusc_anno = dict(
                     sample_token=sample_token,
-                    translation=center_[2],
-                    # translation=box.center.tolist(),
+                    translation=box.center.tolist(),
                     size=box.wlh.tolist(),
                     rotation=box.orientation.elements.tolist(),
                     velocity=box.velocity[:2].tolist(),
-                    # detection_name=name,
+                    detection_name=name,
                     tracking_name=name,
-                    tracking_score=det['track_scores'][i].item(),
-                    tracking_id=str(det['track_ids'][i].item()),
-                    #attribute_name=attr)
+                    # tracking_score=det['track_scores'][i].item(),
+                    detection_score=det['track_scores'][i].item(),
+                    # tracking_id=str(det['track_ids'][i].item()),
+                    attribute_name=attr,
                 )
                 #print(nusc_anno)
                 annos.append(nusc_anno)

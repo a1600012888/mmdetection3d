@@ -26,6 +26,18 @@ from nuscenes.utils.geometry_utils import view_points, box_in_image, BoxVisibili
 from nuscenes.utils.map_mask import MapMask
 from nuscenes.utils.color_map import get_colormap
 
+color_mapping = [
+    np.array([140, 140, 136]) / 255.0,
+    np.array([4, 157, 217]) / 255.0,
+    np.array([191, 4, 54]) / 255.0,
+    np.array([0, 0, 0]) / 255.0,
+    np.array([224, 133, 250]) / 255.0, 
+    np.array([32, 64, 40]) / 255.0,
+    np.array([77, 115, 67]) / 255.0
+]
+
+print('Using color mapping', color_mapping)
+
 
 class NuScenesMars(NuScenes):
     def __init__(self, 
@@ -486,13 +498,21 @@ class NuScenesExplorerMars(NuScenesExplorer):
 
             # Show boxes.
             if with_anns:
-                for box in boxes:
+                for i, box in enumerate(boxes):
                     
+
                     c = np.array(self.get_color(box.name)) / 255.0
-                    box.render(ax, view=np.eye(4), colors=(c, c, c))
+                    if hasattr(box, 'track_ind'): # this is true
+                        tr_id = box.track_ind
+                        c = color_mapping[tr_id  % len(color_mapping)]
+                    # print(c_box)
+                    # print("original color", np.array(self.get_color(box.name)) / 255.0)
+                    box.render(ax, view=np.eye(4), colors=(c,c,c))
+                    # print(c_box, np.array(self.get_color(box.name)) / 255.0)
                     ax.arrow(
                         box.center[0], box.center[1], box.velocity[0], box.velocity[1],
-                        color='cyan', width=0.25, )
+                        color=c, width=0.25, )
+                        # color='cyan', width=0.25, )
 
 
             # Limit visible range.
@@ -515,6 +535,10 @@ class NuScenesExplorerMars(NuScenesExplorer):
             if with_anns:
                 for box in boxes:
                     c = np.array(self.get_color(box.name)) / 255.0
+                    if hasattr(box, 'track_ind'): # this is true
+                        tr_id = box.track_ind
+                        c = color_mapping[tr_id  % len(color_mapping)]
+                    #  if hasattr(box, 'track_ind'): # this is true
                     box.render(ax, view=camera_intrinsic, normalize=True, colors=(c, c, c))
                     center = box.center[:, np.newaxis]
                     velo = box.velocity[:, np.newaxis]
@@ -524,7 +548,8 @@ class NuScenesExplorerMars(NuScenesExplorer):
                     delta = center_add_velo_cam - center_cam
                     ax.arrow(
                         center_cam[0], center_cam[1], delta[0], delta[1],
-                        color='cyan', width=3.0, )
+                        color=c, width=3.0, )
+                        # color='cyan', width=3.0, )
                     
 
             # Limit visible range.
@@ -577,7 +602,7 @@ def load_results_json(results_path: str = None):
         for _box_dict in item:
             if 'detection_name' in _box_dict:
                 score=_box_dict['detection_score']
-                if score < 0.25:
+                if score < 0.15:
                     continue
                 new_box = Box(
                     center=_box_dict['translation'],
@@ -588,8 +613,10 @@ def load_results_json(results_path: str = None):
                     name=inverse_mapping[_box_dict['detection_name']],
                     token=_box_dict['sample_token'])
             else:
+                center_ = _box_dict['translation']
+                center_[2] = center_[2] + 0.5 * _box_dict['size'][2]
                 new_box = Box(
-                    center=_box_dict['translation'],
+                    center=center_,
                     size=_box_dict['size'],
                     orientation=Quaternion(_box_dict['rotation']),
                     label=int(_box_dict['tracking_id']),
@@ -597,6 +624,7 @@ def load_results_json(results_path: str = None):
                     velocity=_box_dict['velocity'] + [0],
                     name=inverse_mapping[_box_dict['tracking_name']],
                     token=_box_dict['sample_token'])
+                new_box.track_ind = int(_box_dict['tracking_id'])
             new_item.append(new_box)
         
         new_results_dict[key] = new_item

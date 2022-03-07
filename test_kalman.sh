@@ -1,0 +1,1 @@
+python3 tools/test.py plugin/track/test_configs/val_kalman_res101.py /mnt/datasets/tianyuan-share/models/beijing_models/final/res101_3f_72ep_best.pth --format-only --eval-options jsonfile_prefix=work_dirs/val_kalman_res101

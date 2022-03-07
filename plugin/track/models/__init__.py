@@ -22,6 +22,7 @@ from .tracker_plus_lidar_velo_extra_refine import Detr3DCamTrackerPlusLidarVeloE
 from .tracker_plus_no_velo import Detr3DCamTrackerPlusNoVelo
 from .tracker_plus_lidar_velo_det_test import Detr3DCamTrackerPlusLidarVeloTestDet
 from .tracker_plus_pred import Detr3DCamTrackerPlusLidarVeloPred
+from .tracker_kalman_motion import Detr3DCamTrackerKalmanSmoothing
 
 from .attention_dert3d import Detr3DCrossAtten, Detr3DCamRadarCrossAtten
 

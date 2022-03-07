@@ -141,7 +141,18 @@ class Instances:
 
         ret = Instances(self._image_size)
         for k, v in self._fields.items():
-            ret.set(k, v[item])
+            # print(k, type(item), 'getitem', item.type(), item.dtype)
+            # if index by torch.BoolTensor
+            if k == 'kalman_models' and isinstance(item, torch.Tensor):
+                # print(item.shape, 'in get item')
+                ret_list = []
+                for i, if_true in enumerate(item):
+                    if if_true:
+                        ret_list.append(self.kalman_models[i])
+                ret.set(k, ret_list)
+
+            else:
+                ret.set(k, v[item])
         return ret
 
     def __len__(self) -> int:

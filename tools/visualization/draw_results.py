@@ -37,7 +37,8 @@ if __name__ == '__main__':
     samples = nusc.sample
 
     results_dict = load_results_json(args.result_path)
-    selected_keys = list(results_dict.keys())[:50]
+    # index must start 0
+    selected_keys = list(results_dict.keys())[:100]
 
     gt_dir = os.path.join(args.out, 'gt')
     pred_dir = os.path.join(args.out, 'pred')
@@ -48,7 +49,7 @@ if __name__ == '__main__':
     if not os.path.exists(pred_dir):
         os.mkdir(pred_dir)
     
-    sensors = ['LIDAR_TOP', 'CAM_FRONT']
+    sensors = ['LIDAR_TOP', 'CAM_FRONT', 'CAM_FRONT_LEFT', 'CAM_FRONT_RIGHT', 'CAM_BACK_RIGHT', 'CAM_BACK_LEFT', 'CAM_BACK']
     for sensor in sensors:
         sensor_tokens = []
         for sample_token in selected_keys:
@@ -58,8 +59,9 @@ if __name__ == '__main__':
             sensor_tokens, selected_keys,
             deepcopy(results_dict), nusc_exp,
             out_dir=os.path.join(pred_dir, sensor), fps=2)
-        make_sensor_videos(sensor_tokens, nusc_exp,
-                           out_dir=os.path.join(gt_dir, sensor),
-                           fps=2)
+        if args.show_gt:
+            make_sensor_videos(sensor_tokens, nusc_exp,
+                               out_dir=os.path.join(gt_dir, sensor),
+                               fps=2)
 
 

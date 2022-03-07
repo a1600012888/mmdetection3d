@@ -16,6 +16,8 @@ from copy import deepcopy
 from mmcv.runner import force_fp32, auto_fp16
 from mmdet3d.core.bbox.util import normalize_bbox, denormalize_bbox
 from .radar_encoder import build_radar_encoder
+from .kalman_filter import BBox as kalman_box
+from .kalman_filter import KalmanFilterMotionModel, detr3dbox_to_bbox, bbox_to_detr3dbox
 
 class RuntimeTrackerBase(object):
     def __init__(self, score_thresh=0.7, filter_score_thresh=0.6, miss_tolerance=5):
@@ -68,13 +70,14 @@ class RuntimeTrackerBase(object):
 
 
 @DETECTORS.register_module()
-class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
+class Detr3DCamTrackerKalmanSmoothing(MVXTwoStageDetector):
     """Tracker which support image w, w/o radar."""
 
     def __init__(self,
                  embed_dims=256,
                  num_query=300,
                  num_classes=7,
+                 kalman_smoothing=0.5, 
                  bbox_coder=dict(
                     type='DETRTrack3DCoder',
                     post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
@@ -111,7 +114,7 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
                  test_cfg=None,
                  pretrained=None,
                  ):
-        super(Detr3DCamTrackerPlusLidarVelo,
+        super(Detr3DCamTrackerKalmanSmoothing,
               self).__init__(pts_voxel_layer, pts_voxel_encoder,
                              pts_middle_encoder, pts_fusion_layer,
                              img_backbone, pts_backbone, img_neck, pts_neck,
@@ -122,6 +125,7 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
         self.num_classes = num_classes
         self.bbox_coder = build_bbox_coder(bbox_coder)
         self.pc_range = self.bbox_coder.pc_range
+        self.kalman_smoothing = kalman_smoothing
 
         self.embed_dims = embed_dims
         self.num_query = num_query
@@ -138,7 +142,7 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
         self.track_base = RuntimeTrackerBase(
             score_thresh=score_thresh,
             filter_score_thresh=filter_score_thresh,
-            miss_tolerance=10)
+            miss_tolerance=5)
 
         self.query_interact = build_qim(
             qim_args,
@@ -199,6 +203,65 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
         ref_pts = inverse_sigmoid(ref_pts)
 
         return ref_pts
+
+    def velo_update_kalman(self, ref_pts, velocity, l2g_r1, l2g_t1, l2g_r2, l2g_t2,
+                           time_delta, track_instances):
+        '''
+        Args:
+            ref_pts (Tensor): (num_query, 3).  in inevrse sigmoid space
+            velocity (Tensor): (num_query, 2). m/s
+                in lidar frame. vx, vy
+            global2lidar (np.Array) [4,4].
+        Outs:
+            ref_pts (Tensor): (num_query, 3).  in inevrse sigmoid space
+        '''
+        g2l_r = torch.linalg.inv(l2g_r2).type(torch.float)
+
+        kalman_pred_list = []
+        num_inst = len(track_instances)
+        for i in range(num_inst):
+            kalman_model = track_instances.kalman_models[i]
+
+            kalman_pred_list.append(kalman_model.get_prediction(time_delta.item()))
+        
+        kalman_pred = bbox_to_detr3dbox(kalman_pred_list, g2l_r, l2g_t2)
+        # print('kalman_pred', kalman_pred, time_delta)
+        # print(kalman_pred.shape)
+        kalman_pred = ref_pts.new_tensor(kalman_pred)
+        kalman_xyz = torch.cat(
+            [kalman_pred[..., :2], kalman_pred[..., [4]]], dim=-1
+        )
+
+        # print(l2g_r1.type(), l2g_t1.type(), ref_pts.type())
+        time_delta = time_delta.type(torch.float)
+        num_query = ref_pts.size(0)
+        velo_pad_ = velocity.new_zeros((num_query, 1))
+        velo_pad = torch.cat((velocity, velo_pad_), dim=-1)
+
+        reference_points = ref_pts.sigmoid().clone()
+        pc_range = self.pc_range
+        reference_points[..., 0:1] = reference_points[..., 0:1]*(pc_range[3] - pc_range[0]) + pc_range[0]
+        reference_points[..., 1:2] = reference_points[..., 1:2]*(pc_range[4] - pc_range[1]) + pc_range[1]
+        reference_points[..., 2:3] = reference_points[..., 2:3]*(pc_range[5] - pc_range[2]) + pc_range[2]
+
+        reference_points = reference_points + velo_pad * time_delta
+
+        ref_pts = reference_points @ l2g_r1 + l2g_t1 - l2g_t2
+
+        g2l_r = torch.linalg.inv(l2g_r2).type(torch.float)
+
+        ref_pts = ref_pts @ g2l_r
+
+        ref_pts = ref_pts * (1.0 - self.kalman_smoothing) + kalman_xyz * self.kalman_smoothing
+
+        ref_pts[..., 0:1] = (ref_pts[..., 0:1] - pc_range[0]) / (pc_range[3] - pc_range[0])
+        ref_pts[..., 1:2] = (ref_pts[..., 1:2] - pc_range[1]) / (pc_range[4] - pc_range[1])
+        ref_pts[..., 2:3] = (ref_pts[..., 2:3] - pc_range[2]) / (pc_range[5] - pc_range[2])
+
+        ref_pts = inverse_sigmoid(ref_pts)
+
+        return ref_pts
+
 
 
     def extract_pts_feat(self, pts, img_feats, img_metas):
@@ -266,7 +329,56 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
         gt_instances.labels = gt_labels_3d
         gt_instances.obj_ids = instance_inds
         return gt_instances
+    
+    def _get_kalman_smoothing_box(self, track_instances, box_pred, 
+                                  l2g_r, l2g_t, time_delta):
+        """
+        box_pred: [N, box_dim]
+        out:
+            smoothed_box at current frame
+        """
 
+        num_box = len(track_instances)
+
+        smoothed_box_list = []
+        pred_bbox_list = []
+
+        # print(l2g_r, l2g_t)
+        tmp_box = detr3dbox_to_bbox(box_pred.detach(), l2g_r, l2g_t)
+
+        for i in range(num_box):
+
+            kalman_model = track_instances.kalman_models[i]
+            if kalman_model is None:
+                kalman_model = KalmanFilterMotionModel(tmp_box[i], None, 0.0)
+                track_instances.kalman_models[i] = kalman_model
+                box_state = kalman_model.get_state()
+                smoothed_box_list.append(box_state)
+                continue
+                
+            
+            # write time delta
+            kalman_model.get_prediction(time_delta.item())
+            kalman_model.update(tmp_box[i])
+
+            box_state = kalman_model.get_state()
+
+            smoothed_box_list.append(box_state)
+        # xyhlzh
+        g2l_r = torch.linalg.inv(l2g_r).type(torch.float)
+        detr3d_box = bbox_to_detr3dbox(smoothed_box_list, g2l_r, l2g_t)
+        detr3d_box = box_pred.new_tensor(detr3d_box)
+
+        smoothed_box = torch.cat(
+            [detr3d_box, 
+            box_pred[..., 6:]], dim=-1,
+        )
+
+        ret_box = smoothed_box * self.kalman_smoothing + box_pred * (1.0 - self.kalman_smoothing)
+
+        return ret_box
+
+                
     def _generate_empty_tracks(self):
         track_instances = Instances((1, 1))
         num_queries, dim = self.query_embedding.weight.shape  # (300, 256 * 2)
@@ -306,6 +418,7 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
             (len(track_instances), self.num_classes),
             dtype=torch.float, device=device)
 
+        track_instances.kalman_models = [None] * len(track_instances)
         mem_bank_len = self.mem_bank_len
         track_instances.mem_bank = torch.zeros(
             (len(track_instances), mem_bank_len, dim // 2),
@@ -549,9 +662,12 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
         if l2g_r2 is not None and len(active_inst) > 0 and l2g_r1 is not None:
             ref_pts = active_inst.ref_pts
             velo = active_inst.pred_boxes[:, -2:]
-            ref_pts = self.velo_update(
+            # ref_pts = self.velo_update(
+            #     ref_pts, velo, l2g_r1, l2g_t1, l2g_r2, l2g_t2,
+            #     time_delta=time_delta)
+            ref_pts = self.velo_update_kalman(
                 ref_pts, velo, l2g_r1, l2g_t1, l2g_r2, l2g_t2,
-                time_delta=time_delta)
+                time_delta=time_delta, track_instances=active_inst)
             active_inst.ref_pts = ref_pts
         track_instances = Instances.cat([other_inst, active_inst])
 
@@ -581,12 +697,18 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
 
         # Step-1 Update track instances with current prediction
         # [nb_dec, bs, num_query, xxx]
+        pred_box = output_coords[-1, 0]        
+
+        #  l2g_r2, l2g_t2 is not used! 
+        smoothing_box = self._get_kalman_smoothing_box(track_instances, pred_box, 
+                            l2g_r2, l2g_t2, time_delta)
 
         # each track will be assigned an unique global id by the track base.
         track_instances.scores = track_scores
         # track_instances.track_scores = track_scores  # [300]
         track_instances.pred_logits = output_classes[-1, 0]  # [300, num_cls]
-        track_instances.pred_boxes = output_coords[-1, 0]  # [300, box_dim]
+        # track_instances.pred_boxes = output_coords[-1, 0]  # [300, box_dim]
+        track_instances.pred_boxes = smoothing_box  # [300, box_dim]
         track_instances.output_embedding = query_feats[0]  # [300, feat_dim]
 
         track_instances.ref_pts = last_ref_pts[0]
@@ -658,8 +780,8 @@ class Detr3DCamTrackerPlusLidarVelo(MVXTwoStageDetector):
             time_delta = None
             l2g_r1 = None
             l2g_t1 = None
-            l2g_r2 = None
-            l2g_t2 = None
+            l2g_r2 = l2g_r_mat
+            l2g_t2 = l2g_t
         else:
             track_instances = self.test_track_instances
             time_delta = timestamp[0] - self.timestamp
